@@ -1,0 +1,22 @@
+node_modules
+
+# Laravel backend runtime files (never commit these)
+laravel_backend/storage/app/public
+laravel_backend/storage/framework/cache/
+laravel_backend/storage/framework/sessions/
+laravel_backend/storage/framework/views/
+laravel_backend/storage/logs/
+laravel_backend/public/storage
+laravel_backend/bootstrap/cache/
+
+# Laravel uploaded files
+laravel_backend/storage/app/private/
+laravel_backend/storage/app/*.jpg
+laravel_backend/storage/app/*.jpeg
+laravel_backend/storage/app/*.png
+laravel_backend/storage/app/*.pdf
+
+# Mobile app build artifacts
+mobile_app/.expo/
+mobile_app/android/
+mobile_app/ios/
