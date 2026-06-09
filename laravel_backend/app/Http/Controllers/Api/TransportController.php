@@ -7,6 +7,7 @@ use App\Models\Transport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Storage;
 
 class TransportController extends Controller
 {
@@ -167,6 +168,64 @@ class TransportController extends Controller
                 'message' => 'Transports retrieved successfully',
                 'data' => $transports,
             ], 200);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function uploadLogo(Request $request, int $id): JsonResponse
+    {
+        try {
+            $transport = Transport::find($id);
+            if (!$transport) {
+                return $this->errorResponse('Transport not found', 404);
+            }
+
+            $request->validate([
+                'logo' => 'required|file|mimes:jpg,jpeg,png,svg,gif|max:2048',
+            ]);
+
+            $file = $request->file('logo');
+            $filename = 'transport_' . $id . '_logo_' . time();
+            $path = \App\Helpers\ImageHelper::compressAndStore($file, 'logos', $filename);
+
+            // Delete old logo
+            if ($transport->logo_path) {
+                \App\Helpers\ImageHelper::purge($transport->logo_path);
+            }
+
+            $transport->update(['logo_path' => $path]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logo uploaded successfully',
+                'data' => [
+                    'logo_path' => $path,
+                    'logo_url' => url('storage/' . $path),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function deleteLogo(int $id): JsonResponse
+    {
+        try {
+            $transport = Transport::find($id);
+            if (!$transport) {
+                return $this->errorResponse('Transport not found', 404);
+            }
+
+            if ($transport->logo_path) {
+                Storage::disk('public')->delete($transport->logo_path);
+                $transport->update(['logo_path' => null]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logo deleted successfully',
+            ]);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

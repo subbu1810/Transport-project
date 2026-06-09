@@ -88,25 +88,28 @@ class BranchDestinationMappingController extends Controller
                 ->pluck('id')
                 ->toArray();
 
-            // Delete existing mappings for this branch in this specific taluk
-            BranchDestinationMapping::where('branch_id', $branchId)
-                ->whereIn('destination_id', $talukDestinationIds)
-                ->delete();
+            // Perform delete and insert in a single transaction
+            \Illuminate\Support\Facades\DB::transaction(function () use ($branchId, $talukDestinationIds, $newDestinationIds) {
+                // Delete existing mappings for this branch in this specific taluk
+                BranchDestinationMapping::where('branch_id', $branchId)
+                    ->whereIn('destination_id', $talukDestinationIds)
+                    ->delete();
 
-            // Create new mappings
-            $mappings = [];
-            foreach ($newDestinationIds as $destId) {
-                $mappings[] = [
-                    'branch_id' => $branchId,
-                    'destination_id' => $destId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
+                // Create new mappings
+                $mappings = [];
+                foreach ($newDestinationIds as $destId) {
+                    $mappings[] = [
+                        'branch_id' => $branchId,
+                        'destination_id' => $destId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
 
-            if (!empty($mappings)) {
-                BranchDestinationMapping::insert($mappings);
-            }
+                if (!empty($mappings)) {
+                    BranchDestinationMapping::insert($mappings);
+                }
+            });
 
             return response()->json([
                 'success' => true,

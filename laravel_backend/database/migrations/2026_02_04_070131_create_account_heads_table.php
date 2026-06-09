@@ -11,13 +11,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('account_heads', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->text('description')->nullable();
-            $table->enum('status', ['Active', 'Inactive'])->default('Active');
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('account_heads')) {
+            Schema::create('account_heads', function (Blueprint $table) {
+                $table->id();
+                $table->string('head_name', 100);
+                $table->string('head_code', 50)->nullable()->unique();
+                $table->enum('transaction_type', ['DEBIT', 'CREDIT'])->default('DEBIT');
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
     }
 
     /**

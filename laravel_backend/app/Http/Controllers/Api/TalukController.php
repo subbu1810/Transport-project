@@ -148,6 +148,25 @@ class TalukController extends Controller
         }
     }
 
+    public function getByDistrict(int $districtId): JsonResponse
+    {
+        try {
+            $taluks = Taluk::with(['district.state'])
+                ->where('district_id', $districtId)
+                ->where('is_active', true)
+                ->orderBy('name', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Taluks retrieved successfully',
+                'data' => $taluks,
+                            ], 200);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
     private function errorResponse(string $message, int $statusCode): JsonResponse
     {
         return response()->json([

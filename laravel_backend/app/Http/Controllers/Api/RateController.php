@@ -13,7 +13,7 @@ class RateController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $rates = Rate::with('consignor')->orderBy('article_type', 'asc')->get();
+            $rates = Rate::with(['consignor', 'destination'])->orderBy('article_type', 'asc')->get();
 
             return response()->json([
                 'success' => true,
@@ -28,7 +28,7 @@ class RateController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $rate = Rate::with('consignor')->find($id);
+            $rate = Rate::with(['consignor', 'destination'])->find($id);
 
             if (!$rate) {
                 return $this->errorResponse('Rate not found', 404);
@@ -49,7 +49,7 @@ class RateController extends Controller
         try {
             $validated = $request->validate(Rate::createRules());
             $rate = Rate::create($validated);
-            $rate->load('consignor');
+            $rate->load(['consignor', 'destination']);
 
             return response()->json([
                 'success' => true,
@@ -78,7 +78,7 @@ class RateController extends Controller
 
             $validated = $request->validate(Rate::updateRules($id));
             $rate->update($validated);
-            $rate->load('consignor');
+            $rate->load(['consignor', 'destination']);
 
             return response()->json([
                 'success' => true,
@@ -126,7 +126,7 @@ class RateController extends Controller
                 return $this->errorResponse('Search query is required', 400);
             }
 
-            $rates = Rate::with('consignor')
+            $rates = Rate::with(['consignor', 'destination'])
                 ->where('article_type', 'like', "%{$query}%")
                 ->orWhereHas('consignor', function ($q) use ($query) {
                     $q->where('name', 'like', "%{$query}%")
@@ -147,7 +147,7 @@ class RateController extends Controller
     public function getByConsignor(int $consignorId): JsonResponse
     {
         try {
-            $rates = Rate::with('consignor')
+            $rates = Rate::with(['consignor', 'destination'])
                 ->where('consignor_id', $consignorId)
                 ->where('is_active', true)
                 ->orderBy('article_type', 'asc')

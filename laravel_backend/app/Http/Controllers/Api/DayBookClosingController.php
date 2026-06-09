@@ -10,6 +10,54 @@ use Illuminate\Support\Facades\Validator;
 class DayBookClosingController extends Controller
 {
     /**
+     * Fetch the opening balance for a specific branch and date
+     */
+    public function getOpeningBalance(Request $request)
+    {
+        $branchId = $request->query('branch_id');
+        $date = $request->query('date');
+
+        if (!$branchId || !$date) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'branch_id and date are required parameters'
+            ], 400);
+        }
+
+        // 1. Find the latest closing balance prior to the selected date
+        $lastClosing = DayBookClosing::where('branch_id', $branchId)
+            ->where('closing_date', '<', $date)
+            ->orderBy('closing_date', 'desc')
+            ->first();
+
+        $baseBalance = $lastClosing ? (float)$lastClosing->closing_balance : 0;
+        $lastClosingDate = $lastClosing ? $lastClosing->closing_date : '1900-01-01';
+
+        // 2. Find any unclosed entries between the last formal closing and the requested date
+        // Note: transaction_date is inclusive of the requested date if we were looking for daily, 
+        // but for OPENING balance we only want transactions < date.
+        $unclosedEntries = \App\Models\CashBookEntry::where('branch_id', $branchId)
+            ->where('transaction_date', '>', $lastClosingDate)
+            ->where('transaction_date', '<', $date)
+            ->get();
+
+        $receiptsTotal = $unclosedEntries->where('transaction_type', 'CREDIT')->sum('amount');
+        $paymentsTotal = $unclosedEntries->where('transaction_type', 'DEBIT')->sum('amount');
+
+        $openingBalance = $baseBalance + ($receiptsTotal - $paymentsTotal);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'opening_balance' => (float)$openingBalance,
+                'last_closing_date' => $lastClosing ? $lastClosing->closing_date : null,
+                'additional_receipts' => (float)$receiptsTotal,
+                'additional_payments' => (float)$paymentsTotal
+            ]
+        ]);
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request)

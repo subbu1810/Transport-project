@@ -11,23 +11,35 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('admins', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('phone_number')->nullable();
-            $table->string('email')->unique(); // Gmail ID
-            $table->text('address')->nullable();
-            $table->string('role')->nullable();
-            $table->string('password');
-            $table->string('branch_code')->nullable();
-            $table->string('branch_name')->nullable();
-            $table->text('branch_address')->nullable();
-            $table->string('branch_email')->nullable();
-            $table->string('branch_phone')->nullable();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            $table->softDeletes();
-        });
+        if (!Schema::hasTable('admins')) {
+            Schema::create('admins', function (Blueprint $table) {
+                $table->id();
+                $table->string('name');
+                $table->string('full_name')->nullable();
+                $table->string('phone_number')->nullable();
+                $table->string('email')->unique(); // Gmail ID
+                $table->text('address')->nullable();
+                $table->string('role')->nullable();
+                $table->string('password');
+                
+                // Transport details
+                $table->unsignedBigInteger('transport_id')->nullable();
+                $table->string('transport_name')->nullable();
+                $table->text('transport_address')->nullable();
+                $table->string('transport_phone')->nullable();
+                
+                // Branch details
+                $table->string('branch_code')->nullable();
+                $table->string('branch_name')->nullable();
+                $table->text('branch_address')->nullable();
+                $table->string('branch_email')->nullable();
+                $table->string('branch_phone')->nullable();
+                
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
     }
 
     /**

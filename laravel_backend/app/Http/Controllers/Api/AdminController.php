@@ -68,20 +68,41 @@ class AdminController extends Controller
             }
         }
 
+        // Load transport with logo if transport_id is set
+        $transport = null;
+        if ($admin->transport_id) {
+            $transport = \App\Models\Transport::find($admin->transport_id);
+        }
+
+        // Fallback for Superadmin or if no transport is explicitly linked:
+        // Try to find any transport record to use as the default company details
+        if (!$transport) {
+            $transport = \App\Models\Transport::where('is_active', true)->first() 
+                      ?? \App\Models\Transport::first();
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
             'data' => [
                 'id' => $admin->id,
                 'name' => $admin->name,
+                'full_name' => $admin->full_name,
                 'email' => $admin->email,
                 'role' => $admin->role,
                 'branch_code' => $admin->branch_code,
                 'branch_name' => $admin->branch_name,
+                'branch_phone' => $admin->branch_phone,
+                'phone_number' => $admin->phone_number,
                 'branch_id' => $branchId,
-                'transport_name' => $admin->transport_name,
-                'transport_address' => $admin->transport_address,
-                'transport_phone' => $admin->transport_phone,
+                'transport_name' => $transport?->transport_name ?? $admin->transport_name,
+                'transport_address' => $transport?->address ?? $admin->transport_address,
+                'transport_phone' => $transport?->phone ?? $admin->transport_phone,
+                'transport_mobile' => $transport?->mobile ?? null,
+                'transport_id' => $admin->transport_id,
+                'transport_gstin' => $transport?->gst_number ?? $admin->gst_number,
+                'transport_logo_url' => $transport?->logo_url ?? null,
+                'consignor_id' => $admin->consignor_id,
             ]
         ]);
     }
@@ -102,7 +123,23 @@ class AdminController extends Controller
             ], 422);
         }
 
-        $admin = Admin::create($request->all());
+        // Fetch Superadmin transport details to implicitly assign
+        // Fixed: Look for transport_name not null instead of transport_id
+        $superadmin = Admin::where('role', 'superadmin')
+            ->whereNotNull('transport_name')
+            ->first();
+        
+        $transportData = [];
+        if ($superadmin) {
+            $transportData = [
+                'transport_id' => $superadmin->transport_id,
+                'transport_name' => $superadmin->transport_name,
+                'transport_address' => $superadmin->transport_address,
+                'transport_phone' => $superadmin->transport_phone,
+            ];
+        }
+
+        $admin = Admin::create(array_merge($request->all(), $transportData));
 
         return response()->json([
             'success' => true,
@@ -138,6 +175,20 @@ class AdminController extends Controller
 
         $admin->update($request->all());
 
+        if (!$admin->transport_id && !$admin->transport_name) {
+            $superadmin = Admin::where('role', 'superadmin')
+                ->whereNotNull('transport_name')
+                ->first();
+            if ($superadmin) {
+                $admin->update([
+                    'transport_id' => $superadmin->transport_id,
+                    'transport_name' => $superadmin->transport_name,
+                    'transport_address' => $superadmin->transport_address,
+                    'transport_phone' => $superadmin->transport_phone,
+                ]);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Admin updated successfully',
@@ -153,5 +204,39 @@ class AdminController extends Controller
         }
         $admin->delete();
         return response()->json(['success' => true, 'message' => 'Admin deleted successfully']);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'admin_id' => 'required|exists:admins,id',
+            'old_password' => 'required|string',
+            'new_password' => 'required|string|min:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $admin = Admin::find($request->admin_id);
+
+        if (!$admin || !\Illuminate\Support\Facades\Hash::check($request->old_password, $admin->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect'
+            ], 401);
+        }
+
+        $admin->password = $request->new_password;
+        $admin->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully'
+        ]);
     }
 }

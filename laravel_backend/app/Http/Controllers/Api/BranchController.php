@@ -140,8 +140,8 @@ class BranchController extends Controller
             }
 
             // Check if branch has related records
-            if ($branch->hasRelatedRecords()) {
-                return $this->errorResponse('Cannot delete branch with related records', 400);
+            if ($reason = $branch->getDeletionBlockingReason()) {
+                return $this->errorResponse($reason, 400);
             }
 
             $branch->delete();

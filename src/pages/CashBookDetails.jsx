@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Filter, Search, Download, Printer, Edit2, Trash2, X, CheckCircle, Calendar, Building2, Save, XCircle } from 'lucide-react'
-
-const API_URL = 'http://localhost:8000/api/v1'
+import { Plus, Filter, Search, Download, Printer, Edit2, Trash2, X, CheckCircle, Calendar, Building2, Save, XCircle, AlertCircle } from 'lucide-react'
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
 
 function CashBookDetails() {
     const [entries, setEntries] = useState([])
@@ -12,6 +11,7 @@ function CashBookDetails() {
     const [showModal, setShowModal] = useState(false)
     const [showCloseModal, setShowCloseModal] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
+    const [loading, setLoading] = useState(false)
 
     const [currentEntry, setCurrentEntry] = useState({
         id: '',
@@ -33,6 +33,7 @@ function CashBookDetails() {
 
     const [dayBookClose, setDayBookClose] = useState({
         date: new Date().toISOString().split('T')[0],
+        openingBalance: 0,
         creditAmount: 0,
         debitAmount: 0,
         dayTotal: 0,
@@ -42,20 +43,52 @@ function CashBookDetails() {
     const [searchQuery, setSearchQuery] = useState('')
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
     const [filterBranch, setFilterBranch] = useState('All Branches')
+    const [isClosed, setIsClosed] = useState(false)
+
+    const [notification, setNotification] = useState({ show: false, type: '', message: '' })
+
+    const showNotify = (type, message) => {
+        setNotification({ show: true, type, message })
+        setTimeout(() => setNotification({ show: false, type: '', message: '' }), 5000)
+    }
+
+    const today = new Date().toISOString().split('T')[0]  // YYYY-MM-DD of today
 
     const [currentUser, setCurrentUser] = useState(null)
+    const [companyDetails, setCompanyDetails] = useState({
+        name: '',
+        subtitle: '',
+        address: '',
+        phone: '',
+        logo: null
+    })
 
     useEffect(() => {
-        const user = JSON.parse(localStorage.getItem('user'))
-        setCurrentUser(user)
-        if (user && user.role !== 'superadmin') {
-            setFilterBranch(user.branch_name)
+        const userData = localStorage.getItem('user')
+        if (userData) {
+            try {
+                const user = JSON.parse(userData)
+                setCurrentUser(user)
+                setCompanyDetails({
+                    name: user.transport_name || '',
+                    subtitle: user.transport_subtitle || '',
+                    address: user.transport_address || '',
+                    phone: user.transport_phone || '',
+                    logo: user.transport_logo_url || user.transport_logo_path || null
+                })
+                if (user && user.role !== 'superadmin') {
+                    setFilterBranch(user.branch_name)
+                }
+            } catch (e) {
+                console.error("Error parsing user data", e)
+            }
         }
     }, [])
 
     useEffect(() => {
         if (branches.length > 0) {
             fetchEntries()
+            checkClosingStatus()
         }
     }, [filterDate, filterBranch, searchQuery, branches])
 
@@ -66,7 +99,7 @@ function CashBookDetails() {
 
     const fetchBranches = async () => {
         try {
-            const response = await fetch(`${API_URL}/branches`)
+            const response = await fetch(`${API_BASE_URL}/branches`)
             const data = await response.json()
             if (data.success) setBranches(data.data)
         } catch (err) {
@@ -76,7 +109,7 @@ function CashBookDetails() {
 
     const fetchHeads = async () => {
         try {
-            const response = await fetch(`${API_URL}/account-heads`)
+            const response = await fetch(`${API_BASE_URL}/account-heads`)
             const data = await response.json()
             if (data.success) setHeads(data.data)
         } catch (err) {
@@ -86,20 +119,55 @@ function CashBookDetails() {
 
     const fetchEntries = async () => {
         try {
-            let url = `${API_URL}/cash-book?date=${filterDate}&search=${searchQuery}`
-            if (filterBranch !== 'All Branches') {
-                const branchObj = branches.find(b => b.branch_name === filterBranch);
-                if (branchObj) url += `&branch_id=${branchObj.id}`
+            setLoading(true)
+            const params = {
+                date: filterDate,
+                search: searchQuery
             }
-            const response = await fetch(url)
+            if (filterBranch && filterBranch !== 'All Branches') {
+                const branchObj = branches.find(b => b.branch_name === filterBranch);
+                if (branchObj) {
+                    params.branch_id = branchObj.id
+                }
+            }
+            const response = await fetch(`${API_BASE_URL}/cash-book?` + new URLSearchParams(params))
             const data = await response.json()
             if (data.success) setEntries(data.data)
         } catch (err) {
             console.error('Error fetching entries:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const checkClosingStatus = async () => {
+        if (!filterBranch || filterBranch === 'All Branches') {
+            setIsClosed(false)
+            return
+        }
+        try {
+            const branchObj = branches.find(b => b.branch_name === filterBranch);
+            if (!branchObj) return;
+
+            const response = await fetch(`${API_BASE_URL}/day-book-closings?from_date=${filterDate}&to_date=${filterDate}&branch_id=${branchObj.id}`)
+            const data = await response.json()
+            if (data.success) {
+                setIsClosed(data.data.length > 0)
+            }
+        } catch (err) {
+            console.error('Error checking closing status:', err)
         }
     }
 
     const handleOpenModal = (typeArg = '', entry = null) => {
+        if (isClosed && !entry) {
+            showNotify('error', 'Cannot add entries for a closed day.')
+            return
+        }
+        if (isClosed && entry) {
+            showNotify('error', 'Cannot edit entries for a closed day.')
+            return
+        }
         if (entry) {
             setCurrentEntry({
                 ...entry,
@@ -130,15 +198,39 @@ function CashBookDetails() {
     }
 
     const handleSaveEntry = async () => {
+        if (isClosed) {
+            showNotify('error', 'Access Denied: DayBook is closed.')
+            return
+        }
         if (!currentEntry.transaction_type || !currentEntry.account_head_id || !currentEntry.amount) {
-            alert('Please fill in all required fields (Type, Head, and Amount)')
+            showNotify('error', 'Please fill in all required fields (Type, Head, and Amount)')
+            return
+        }
+
+        // Mode of Pay Validation
+        if (currentEntry.mode_of_pay === 'Cheque' || currentEntry.mode_of_pay === 'DD') {
+            if (!currentEntry.dd_cheque_no || !currentEntry.dd_cheque_date) {
+                showNotify('error', `Please enter ${currentEntry.mode_of_pay} Number and Date.`)
+                return
+            }
+        }
+        if (currentEntry.mode_of_pay === 'Online') {
+            if (!currentEntry.dd_cheque_no) {
+                showNotify('error', 'Please enter Transaction Number for Online payment.')
+                return
+            }
+        }
+
+        // Block future dates
+        if (currentEntry.transaction_date > today) {
+            showNotify('error', `Future dates are not allowed. Today is ${today}.`)
             return
         }
 
         try {
             const url = isEditing
-                ? `${API_URL}/cash-book/${currentEntry.id}`
-                : `${API_URL}/cash-book`
+                ? `${API_BASE_URL}/cash-book/${currentEntry.id}`
+                : `${API_BASE_URL}/cash-book`
 
             const method = isEditing ? 'PUT' : 'POST'
 
@@ -152,8 +244,9 @@ function CashBookDetails() {
             if (data.success) {
                 fetchEntries()
                 setShowModal(false)
+                showNotify('success', isEditing ? 'Entry updated successfully!' : 'Entry saved successfully!')
             } else {
-                alert('Error saving entry: ' + JSON.stringify(data.message))
+                showNotify('error', 'Error saving entry: ' + (typeof data.message === 'string' ? data.message : JSON.stringify(data.message)))
             }
         } catch (err) {
             console.error('Error saving entry:', err)
@@ -161,57 +254,71 @@ function CashBookDetails() {
     }
 
     const handleDelete = async (id) => {
+        if (isClosed) {
+            showNotify('error', 'Cannot delete entries for a closed day.')
+            return
+        }
         if (window.confirm('Are you sure you want to delete this entry?')) {
             try {
-                const response = await fetch(`${API_URL}/cash-book/${id}`, { method: 'DELETE' })
+                const response = await fetch(`${API_BASE_URL}/cash-book/${id}`, { method: 'DELETE' })
                 const data = await response.json()
-                if (data.success) fetchEntries()
+                if (data.success) {
+                    fetchEntries()
+                    showNotify('success', 'Entry deleted successfully!')
+                } else {
+                    showNotify('error', 'Failed to delete entry: ' + data.message)
+                }
             } catch (err) {
                 console.error('Error deleting entry:', err)
             }
         }
     }
 
-    const handleOpenCloseModal = () => {
+    const handleOpenCloseModal = async () => {
+        if (isClosed) {
+            showNotify('error', 'DayBook is already closed for this date.')
+            return
+        }
+        if (filterBranch === 'All Branches') {
+            showNotify('error', 'Please select a specific branch to close the book.')
+            return
+        }
+
+        const branchObj = branches.find(b => b.branch_name === filterBranch)
+        if (!branchObj) return;
+
+        let previousClosingBalance = 0;
+        try {
+            const response = await fetch(`${API_BASE_URL}/day-book-closings/opening-balance?branch_id=${branchObj.id}&date=${filterDate}`)
+            const data = await response.json()
+            if (data.success) {
+                previousClosingBalance = Number(data.data.opening_balance) || 0;
+            }
+        } catch (err) {
+            console.error('Error fetching opening balance:', err)
+        }
+
         const credits = entries.filter(e => e.transaction_type === 'CREDIT').reduce((a, b) => a + Number(b.amount), 0)
         const debits = entries.filter(e => e.transaction_type === 'DEBIT').reduce((a, b) => a + Number(b.amount), 0)
 
         setDayBookClose({
             date: filterDate,
+            openingBalance: previousClosingBalance,
             creditAmount: credits,
             debitAmount: debits,
-            dayTotal: credits - debits,
+            dayTotal: previousClosingBalance + credits - debits,
             remarks: ''
         })
         setShowCloseModal(true)
     }
 
     const handleConfirmClose = async () => {
-        // Find or create a 'CLOSING BALANCE' head ID
-        const closingHead = heads.find(h => h.name === 'CLOSING_BALANCE')
-        if (!closingHead) {
-            alert('Please create an Account Head named "CLOSING_BALANCE" first.')
-            return
-        }
-
         const branchObj = filterBranch === 'All Branches' ? branches[0] : branches.find(b => b.branch_name === filterBranch)
-
-        const closingEntry = {
-            voucher_no: `CLO-${Date.now().toString().slice(-6)}`,
-            transaction_date: dayBookClose.date,
-            account_head_id: closingHead.id,
-            transaction_type: 'DEBIT',
-            amount: Math.abs(dayBookClose.dayTotal),
-            remarks: dayBookClose.remarks || `DayBook Closed: ${dayBookClose.date}`,
-            branch_id: branchObj?.id || null,
-            mode_of_pay: 'Cash',
-            is_closing_entry: true
-        }
 
         const closingSummary = {
             closing_date: dayBookClose.date,
             branch_id: branchObj?.id || null,
-            opening_balance: 0, // In a real system, fetch previous day's closing
+            opening_balance: dayBookClose.openingBalance,
             credit_total: dayBookClose.creditAmount,
             debit_total: dayBookClose.debitAmount,
             closing_balance: dayBookClose.dayTotal,
@@ -219,27 +326,22 @@ function CashBookDetails() {
         }
 
         try {
-            // Save the closing entry in cash book
-            const resp1 = await fetch(`${API_URL}/cash-book`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(closingEntry)
-            })
-
             // Save the summary in day_book_closings
-            const resp2 = await fetch(`${API_URL}/day-book-closings`, {
+            const response = await fetch(`${API_BASE_URL}/day-book-closings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(closingSummary)
             })
 
-            const data1 = await resp1.json()
-            const data2 = await resp2.json()
+            const data = await response.json()
 
-            if (data1.success && data2.success) {
+            if (data.success) {
                 fetchEntries()
+                checkClosingStatus()
                 setShowCloseModal(false)
-                alert('DayBook closed and summary stored successfully!')
+                showNotify('success', 'DayBook closed and summary stored successfully!')
+            } else {
+                showNotify('error', 'Failed to close DayBook correctly.')
             }
         } catch (err) {
             console.error('Error closing DayBook:', err)
@@ -248,126 +350,271 @@ function CashBookDetails() {
 
     const printVoucher = (entry) => {
         const printWindow = window.open('', '_blank')
+
+        let logoSrc = companyDetails.logo;
+        if (logoSrc && !logoSrc.startsWith('http')) {
+            logoSrc = `${STORAGE_URL}/${logoSrc}`;
+        }
+
+        const logoHtml = logoSrc
+            ? `<img src="${logoSrc}" style="height: 40px; max-width: 100px; object-fit: contain;" />`
+            : '';
+
         printWindow.document.write(`
       <html>
         <head>
-          <title>Cash Voucher - ${entry.voucher_no}</title>
+          <title>Voucher - ${entry.voucher_no}</title>
           <style>
-            body { font-family: sans-serif; padding: 40px; color: #333; }
-            .voucher { border: 3px solid #1e3a8a; padding: 30px; max-width: 800px; margin: auto; background: #fff; }
-            .header { text-align: center; border-bottom: 2px solid #1e3a8a; margin-bottom: 20px; padding-bottom: 15px; }
-            .header h1 { margin: 0; color: #1e3a8a; font-size: 28px; }
-            .voucher-type { display: inline-block; background: #1e3a8a; color: white; padding: 5px 20px; border-radius: 20px; margin-top: 10px; font-weight: bold; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
-            .info-item { border-bottom: 1px dotted #aaa; padding: 5px 0; }
-            .info-item b { color: #1e3a8a; width: 140px; display: inline-block; }
-            .amount-section { margin-top: 30px; padding: 15px; background: #f8fafc; border: 2px dashed #1e3a8a; font-size: 24px; font-weight: bold; display: flex; justify-content: space-between; }
-            .footer { margin-top: 60px; display: flex; justify-content: space-between; }
-            .sign-box { text-align: center; width: 200px; }
-            .sign-line { border-top: 2px solid #1e3a8a; margin-bottom: 5px; }
+            @page { size: A4; margin: 5mm; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; margin: 0; color: #1e3a8a; background: #fff; }
+            .voucher { 
+                border: 1.5px solid #1e3a8a; 
+                padding: 10px; 
+                max-width: 500px; 
+                margin: 5px auto; 
+                background: #fff; 
+                page-break-inside: avoid;
+            }
+            .header-container { 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                gap: 15px; 
+                border-bottom: 1px solid #1e3a8a; 
+                margin-bottom: 8px; 
+                padding-bottom: 5px; 
+            }
+            .header-text { text-align: center; }
+            .header-text h1 { margin: 0; color: #1e3a8a; font-size: 16px; font-weight: 950; text-transform: uppercase; line-height: 1; }
+            .header-text p { margin: 1px 0; font-size: 9px; font-weight: bold; color: #444; line-height: 1; }
+            
+            .voucher-type-row { text-align: center; margin-bottom: 8px; }
+            .voucher-type { 
+                display: inline-block; 
+                background: #1e3a8a; 
+                color: #fff; 
+                padding: 2px 15px; 
+                border-radius: 2px; 
+                font-weight: 900; 
+                font-size: 11px; 
+                text-transform: uppercase; 
+            }
+
+            .info-grid { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                gap: 4px 20px; 
+                margin-bottom: 8px; 
+            }
+            .info-item { 
+                border-bottom: 0.5px dotted #1e3a8a; 
+                padding: 1px 0; 
+                font-size: 10px; 
+                display: flex; 
+                justify-content: space-between; 
+            }
+            .info-item b { color: #1e3a8a; font-size: 9px; text-transform: uppercase; }
+            .info-item span { font-weight: bold; color: #000; }
+
+            .full-width-item {
+                border-bottom: 0.5px dotted #1e3a8a; 
+                padding: 2px 0; 
+                font-size: 10px;
+                display: flex;
+                gap: 5px;
+            }
+            .full-width-item b { color: #1e3a8a; font-size: 9px; text-transform: uppercase; white-space: nowrap; }
+            .full-width-item span { font-weight: bold; color: #000; }
+
+            .particulars-box { 
+                border: 0.5px solid #1e3a8a; 
+                padding: 5px; 
+                border-radius: 2px; 
+                margin-top: 5px;
+                margin-bottom: 10px; 
+                min-height: 30px; 
+            }
+            .particulars-box b { 
+                display: block; 
+                color: #1e3a8a; 
+                font-size: 8px; 
+                text-transform: uppercase; 
+                border-bottom: 0.5px solid #eee; 
+                margin-bottom: 2px;
+            }
+            .particulars-box span { font-size: 10px; font-weight: bold; color: #333; }
+
+            .amount-section { 
+                padding: 6px 12px; 
+                background: #f8fafc; 
+                border: 1.5px dashed #1e3a8a; 
+                border-radius: 4px; 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                margin-bottom: 15px; 
+            }
+            .amount-label { font-size: 12px; font-weight: 900; color: #1e3a8a; }
+            .amount-value { font-size: 18px; font-weight: 950; color: #000; }
+
+            .footer { 
+                display: flex; 
+                justify-content: space-between; 
+                gap: 15px; 
+                margin-top: 25px; 
+            }
+            .sign-box { text-align: center; flex: 1; position: relative; }
+            .sign-line { border-top: 0.5px solid #1e3a8a; margin-bottom: 3px; width: 100%; }
+            .sign-text { font-size: 9px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; }
+
+            @media print {
+              .voucher { margin: 5px auto; }
+              body { background: none; }
+            }
           </style>
         </head>
-        <body>
+        <body onload="window.print(); window.onafterprint = function() { window.close(); };">
           <div class="voucher">
-            <div class="header">
-              <h1>SRI GANESH ROAD LINES</h1>
-              <p>Transport Contractors & Commission Agents</p>
-              <div class="voucher-type">CASH ${entry.transaction_type.toUpperCase()} VOUCHER</div>
+            <div class="header-container">
+              ${logoHtml}
+              <div class="header-text">
+                <h1>${companyDetails.name}</h1>
+                ${companyDetails.address ? `<p>${companyDetails.address} | Ph: ${companyDetails.phone}</p>` : ''}
+              </div>
             </div>
+            
+            <div class="voucher-type-row">
+              <div class="voucher-type">CASH ${entry.transaction_type} VOUCHER</div>
+            </div>
+
             <div class="info-grid">
-              <div class="info-item"><b>Voucher No:</b> ${entry.voucher_no}</div>
-              <div class="info-item"><b>Date:</b> ${entry.transaction_date}</div>
-              <div class="info-item"><b>Branch:</b> ${entry.branch?.branch_name || 'N/A'}</div>
-              <div class="info-item"><b>Account Head:</b> ${entry.account_head?.name || 'N/A'}</div>
-              <div class="info-item"><b>Mode of Pay:</b> ${entry.mode_of_pay}</div>
-              <div class="info-item"><b>Ref No:</b> ${entry.dd_cheque_no || 'N/A'}</div>
-              <div class="info-item"><b>Paid/Recv By:</b> ${entry.paid_by_received_by || 'N/A'}</div>
-              <div class="info-item"><b>Authorised By:</b> ${entry.authorised_by || 'N/A'}</div>
+              <div class="info-item"><b>Voucher No</b> <span>${entry.voucher_no}</span></div>
+              <div class="info-item"><b>Date</b> <span>${entry.transaction_date}</span></div>
+              <div class="info-item"><b>Branch</b> <span>${entry.branch?.branch_name || 'N/A'}</span></div>
+              <div class="info-item"><b>Mode</b> <span>${entry.mode_of_pay}</span></div>
             </div>
-            <div style="margin-top: 20px; border-bottom: 1px dotted #aaa; padding-bottom: 10px;">
-              <b>Particulars:</b> ${entry.remarks || 'N/A'}
+
+            <div class="full-width-item"><b>Head:</b> <span>${entry.account_head?.name || 'N/A'}</span></div>
+            <div class="full-width-item"><b>Paid/Recv:</b> <span>${entry.paid_by_received_by || 'N/A'}</span></div>
+
+            <div class="particulars-box">
+              <b>Remarks</b>
+              <span>${entry.remarks || 'N/A'}</span>
             </div>
+
             <div class="amount-section">
-              <span>TOTAL AMOUNT:</span>
-              <span>₹ ${Number(entry.amount).toLocaleString('en-IN')}</span>
+              <span class="amount-label">TOTAL AMOUNT</span>
+              <span class="amount-value">₹ ${Number(entry.amount).toLocaleString('en-IN')}</span>
             </div>
+
             <div class="footer">
-              <div class="sign-box"><div class="sign-line"></div>Receiver's Signature</div>
-              <div class="sign-box"><div class="sign-line"></div>Accountant</div>
-              <div class="sign-box"><div class="sign-line"></div>Manager</div>
+              <div class="sign-box">
+                <div class="sign-line"></div>
+                <div class="sign-text">Receiver Signature</div>
+              </div>
+              <div class="sign-box">
+                <div class="sign-line"></div>
+                <div class="sign-text">Accountant</div>
+              </div>
+              <div class="sign-box">
+                <div class="sign-line"></div>
+                <div class="sign-text">Manager</div>
+              </div>
             </div>
           </div>
         </body>
       </html>
     `)
         printWindow.document.close()
-        printWindow.print()
     }
 
     // Filter heads based on selected transaction type inside modal
     const filteredHeads = heads.filter(h => h.transaction_type === currentEntry.transaction_type)
 
     return (
-        <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="p-2 space-y-4 bg-gray-50 min-h-screen">
+            <style>{`
+                @media print {
+                    .no-print { display: none !important; }
+                    body { background: white !important; margin: 0; padding: 0; }
+                    .bg-white { box-shadow: none !important; border: none !important; }
+                    table { border-collapse: collapse !important; width: 100% !important; }
+                    th { background-color: #f3f4f6 !important; color: black !important; border: 1px solid #e5e7eb !important; }
+                    td { border: 1px solid #e5e7eb !important; }
+                    .min-h-screen { min-height: auto !important; }
+                    .p-2 { padding: 0 !important; }
+                    @page { size: auto; margin: 10mm 15mm; }
+                }
+            `}</style>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 no-print">
                 <div>
-                    <h1 className="text-3xl font-bold text-[#1e3a8a]">Cash Book Details</h1>
-                    <p className="text-gray-500 text-sm">Manage daily receipts, payments and cash balance</p>
+                    <h1 className="text-xl font-bold text-[#1e3a8a]">Cash Book Details</h1>
+                    <p className="text-gray-500 text-xs">Manage daily receipts, payments and cash balance</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
+                    {isClosed && (
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-rose-100 text-rose-700 rounded border-2 border-rose-300 font-black text-sm uppercase animate-pulse">
+                            <XCircle size={18} />
+                            DayBook Closed
+                        </div>
+                    )}
                     <button
                         onClick={() => handleOpenModal('')}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-lg hover:shadow-xl font-semibold"
+                        disabled={isClosed}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition shadow hover:shadow-md font-bold ${isClosed ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            }`}
                     >
-                        <Plus size={20} />
+                        <Plus size={16} />
                         Add Entry
                     </button>
                     <button
                         onClick={handleOpenCloseModal}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg hover:shadow-xl font-semibold"
+                        disabled={isClosed}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition shadow hover:shadow-md font-bold ${isClosed ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
                     >
-                        <CheckCircle size={20} />
-                        Close Book
+                        <CheckCircle size={16} />
+                        {isClosed ? 'Book Closed' : 'Close Book'}
                     </button>
                 </div>
             </div>
 
-            {/* Filters Section */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-end">
-                <div className="flex-1 min-w-[200px] space-y-1">
-                    <label className="text-xs font-bold text-gray-600 uppercase">Search Details</label>
+            {/* Filters Section - Hide on print */}
+            <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-3 items-end no-print">
+                <div className="flex-1 min-w-[150px] space-y-0.5">
+                    <label className="text-[10px] font-bold text-gray-600 uppercase">Search Details</label>
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input
                             type="text"
-                            placeholder="Search by description or head..."
+                            placeholder="Search description..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none transition"
                         />
                     </div>
                 </div>
-                <div className="w-full md:w-auto space-y-1">
-                    <label className="text-xs font-bold text-gray-600 uppercase">Date</label>
+                <div className="w-full md:w-auto space-y-0.5">
+                    <label className="text-[10px] font-bold text-gray-600 uppercase">Date</label>
                     <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input
                             type="date"
                             value={filterDate}
                             onChange={(e) => setFilterDate(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none transition"
                         />
                     </div>
                 </div>
-                <div className="w-full md:w-auto space-y-1">
-                    <label className="text-xs font-bold text-gray-600 uppercase">Branch</label>
+                <div className="w-full md:w-auto space-y-0.5">
+                    <label className="text-[10px] font-bold text-gray-600 uppercase">Branch</label>
                     <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <select
                             value={filterBranch}
                             onChange={(e) => setFilterBranch(e.target.value)}
                             disabled={currentUser?.role !== 'superadmin'}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white transition appearance-none disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none bg-white transition appearance-none disabled:bg-gray-100 disabled:text-gray-500"
                         >
                             {currentUser?.role === 'superadmin' && <option>All Branches</option>}
                             {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
@@ -376,27 +623,47 @@ function CashBookDetails() {
                 </div>
                 <button
                     onClick={() => window.print()}
-                    className="flex items-center gap-2 px-4 py-2 border-2 border-[#1e3a8a] text-[#1e3a8a] rounded-lg hover:bg-blue-50 transition font-bold"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a8a] text-white text-xs rounded hover:bg-blue-800 transition font-bold shadow-sm"
                 >
-                    <Download size={18} />
-                    PDF
+                    <Printer size={14} />
+                    PRINT REPORT / PDF
                 </button>
             </div>
 
+            {/* Print Header - Visible only in Print */}
+            <div className="hidden print:block print-header mb-6">
+                <div className="flex items-center justify-center gap-6 border-b-2 border-gray-800 pb-4">
+                    {companyDetails.logo && (
+                        <img
+                            src={companyDetails.logo.startsWith('http') ? companyDetails.logo : `${STORAGE_URL}/${companyDetails.logo}`}
+                            alt="Logo"
+                            className="h-16 w-auto object-contain"
+                        />
+                    )}
+                    <div className="text-center">
+                        <h1 className="text-2xl font-black text-[#1e3a8a] uppercase">{companyDetails.name}</h1>
+                        <p className="text-xs font-medium text-gray-500">{companyDetails.address}</p>
+                        <p className="text-xs font-black text-gray-800 tracking-widest mt-2 border-t border-gray-200 pt-2 uppercase">
+                            Cash Book Report - {filterBranch} ({filterDate})
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* Table Section */}
-            <div className="bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-[11px]">
                         <thead>
                             <tr className="bg-[#1e3a8a] text-white">
-                                <th className="px-6 py-4 text-left font-semibold">Date</th>
-                                <th className="px-6 py-4 text-left font-semibold">Branch</th>
-                                <th className="px-6 py-4 text-left font-semibold">Account Head</th>
-                                <th className="px-6 py-4 text-left font-semibold">Remarks</th>
-                                <th className="px-6 py-4 text-right font-semibold">Credit (₹)</th>
-                                <th className="px-6 py-4 text-right font-semibold">Debit (₹)</th>
-                                <th className="px-6 py-4 text-right font-semibold">Balance (₹)</th>
-                                <th className="px-6 py-4 text-center font-semibold">Actions</th>
+                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Date</th>
+                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Branch</th>
+                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Account Head</th>
+                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Remarks</th>
+                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Credit (₹)</th>
+                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Debit (₹)</th>
+                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Balance (₹)</th>
+                                <th className="px-3 py-2 text-center font-bold uppercase tracking-tight no-print">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -406,26 +673,30 @@ function CashBookDetails() {
                                 }, 0)
 
                                 return (
-                                    <tr key={entry.id} className="hover:bg-blue-50 transition group">
-                                        <td className="px-6 py-4 font-medium text-gray-700">{entry.transaction_date}</td>
-                                        <td className="px-6 py-4 text-gray-600">{entry.branch?.branch_name || 'N/A'}</td>
-                                        <td className="px-6 py-4 font-bold text-blue-900">{entry.account_head?.name || 'N/A'}</td>
-                                        <td className="px-6 py-4 text-gray-600 italic">"{entry.remarks}"</td>
-                                        <td className="px-6 py-4 text-right font-bold text-emerald-600 bg-emerald-50/30">
+                                    <tr key={entry.id} className="hover:bg-blue-50/50 transition border-b border-gray-100">
+                                        <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">{entry.transaction_date}</td>
+                                        <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap text-[9px] print:text-xs">{entry.branch?.branch_name || 'N/A'}</td>
+                                        <td className="px-3 py-1.5 font-bold text-blue-900">{entry.account_head?.name || 'N/A'}</td>
+                                        <td className="px-3 py-1.5 text-gray-600">
+                                            <div className="whitespace-normal break-words">"{entry.remarks}"</div>
+                                        </td>
+                                        <td className="px-3 py-1.5 text-right font-bold text-emerald-600">
                                             {entry.transaction_type === 'CREDIT' ? Number(entry.amount).toLocaleString('en-IN') : '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-rose-600 bg-rose-50/30">
+                                        <td className="px-3 py-1.5 text-right font-bold text-rose-600">
                                             {entry.transaction_type === 'DEBIT' ? Number(entry.amount).toLocaleString('en-IN') : '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-black text-gray-800">
+                                        <td className="px-3 py-1.5 text-right font-black text-gray-800 bg-gray-50/30">
                                             {balance.toLocaleString('en-IN')}
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-3 py-1.5 no-print">
                                             <div className="flex justify-center gap-2">
                                                 <button
                                                     onClick={() => handleOpenModal(entry.transaction_type, entry)}
-                                                    className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                                                    title="Edit"
+                                                    disabled={isClosed}
+                                                    className={`p-1.5 rounded-lg transition ${isClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-blue-600 hover:bg-blue-100'
+                                                        }`}
+                                                    title={isClosed ? "Restricted: DayBook Closed" : "Edit"}
                                                 >
                                                     <Edit2 size={16} />
                                                 </button>
@@ -438,8 +709,10 @@ function CashBookDetails() {
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(entry.id)}
-                                                    className="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg transition"
-                                                    title="Delete"
+                                                    disabled={isClosed}
+                                                    className={`p-1.5 rounded-lg transition ${isClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-rose-600 hover:bg-rose-100'
+                                                        }`}
+                                                    title={isClosed ? "Restricted: DayBook Closed" : "Delete"}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -449,25 +722,40 @@ function CashBookDetails() {
                                 )
                             }) : (
                                 <tr>
-                                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400 italic">No entries found for this date.</td>
+                                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400 italic font-medium">
+                                        {loading ? (
+                                            <div className="flex flex-col items-center gap-3">
+                                                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                                <span className="text-blue-600 font-bold uppercase tracking-widest text-[10px]">Loading Entries...</span>
+                                            </div>
+                                        ) : (
+                                            'No entries found for this date.'
+                                        )}
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
-                        <tfoot className="bg-gray-100 font-black border-t-4 border-[#1e3a8a]/20">
-                            <tr>
-                                <td colSpan="4" className="px-6 py-4 text-right text-[#1e3a8a]">SUB TOTALS:</td>
-                                <td className="px-6 py-4 text-right text-emerald-700 bg-emerald-50">
-                                    ₹{entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
-                                </td>
-                                <td className="px-6 py-4 text-right text-rose-700 bg-rose-50">
-                                    ₹{entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
-                                </td>
-                                <td className="px-6 py-4 text-right text-[#1e3a8a] bg-blue-50 text-xl">
-                                    ₹{(entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0) -
-                                        entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0)).toLocaleString('en-IN')}
-                                </td>
-                                <td></td>
-                            </tr>
+                        <tfoot className="bg-gray-50 font-black border-t-2 border-[#1e3a8a]/20">
+                            {!isClosed ? (
+                                <tr>
+                                    <td colSpan="4" className="px-3 py-2 text-right text-[#1e3a8a] text-[10px] uppercase">Totals:</td>
+                                    <td className="px-3 py-2 text-right text-emerald-700 bg-emerald-50/50">
+                                        ₹{entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-rose-700 bg-rose-50/50">
+                                        ₹{entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-[#1e3a8a] bg-blue-50 text-xs">
+                                        ₹{(entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0) -
+                                            entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0)).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="no-print"></td>
+                                </tr>
+                            ) : (
+                                <tr>
+                                    <td colSpan="8" className="px-4 py-2 text-center text-gray-400 text-[10px] uppercase tracking-widest italic">End of Summary - All Transactions Protected</td>
+                                </tr>
+                            )}
                         </tfoot>
                     </table>
                 </div>
@@ -478,11 +766,17 @@ function CashBookDetails() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
                     <div className="bg-[#fdfdf3] rounded-lg shadow-2xl w-full max-w-4xl overflow-hidden border-2 border-gray-300">
                         {/* Header */}
-                        <div className="p-4 bg-gray-50 border-b border-gray-300 flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-gray-800">
-                                Cash book Entry Details ({currentEntry.transaction_type || 'New'} Voucher No: {currentEntry.voucher_no})
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-red-600 transition">
+                        <div className="p-5 bg-emerald-600 text-white flex justify-between items-center relative overflow-hidden">
+                            <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                            <div className="relative z-10">
+                                <h2 className="text-xl font-black uppercase tracking-tight">
+                                    Cash book Entry
+                                </h2>
+                                <p className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest mt-0.5">
+                                    {currentEntry.transaction_type || 'New'} Voucher: {currentEntry.voucher_no}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowModal(false)} className="relative z-10 text-white hover:bg-white/20 rounded-xl p-2 transition-all duration-300">
                                 <X size={24} />
                             </button>
                         </div>
@@ -494,6 +788,7 @@ function CashBookDetails() {
                                     <label className="w-40 text-sm font-semibold text-gray-700">Transaction date</label>
                                     <input
                                         type="date"
+                                        max={today}
                                         className="flex-1 p-2 border border-gray-300 rounded bg-[#fffced] focus:ring-2 focus:ring-yellow-400 outline-none"
                                         value={currentEntry.transaction_date}
                                         onChange={(e) => setCurrentEntry({ ...currentEntry, transaction_date: e.target.value })}
@@ -570,21 +865,31 @@ function CashBookDetails() {
                                         <option value="Online">Online</option>
                                     </select>
                                 </div>
+
                                 <div className="flex items-center gap-4">
-                                    <label className="w-40 text-sm font-semibold text-gray-700">DD/CHEQUE NO</label>
+                                    <label className="w-40 text-sm font-semibold text-gray-700">
+                                        {currentEntry.mode_of_pay === 'Online' ? 'Transaction No' : 'DD/CHEQUE NO'}
+                                        {currentEntry.mode_of_pay !== 'Cash' && <span className="text-red-500">*</span>}
+                                    </label>
                                     <input
                                         type="text"
-                                        className="flex-1 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-yellow-400 outline-none"
+                                        className={`flex-1 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-yellow-400 outline-none ${currentEntry.mode_of_pay === 'Cash' ? 'bg-gray-100 italic' : 'bg-[#fffced]'}`}
+                                        placeholder={currentEntry.mode_of_pay === 'Cash' ? 'Not Applicable' : ''}
+                                        disabled={currentEntry.mode_of_pay === 'Cash'}
                                         value={currentEntry.dd_cheque_no}
                                         onChange={(e) => setCurrentEntry({ ...currentEntry, dd_cheque_no: e.target.value })}
                                     />
                                 </div>
 
                                 <div className="flex items-center gap-4">
-                                    <label className="w-40 text-sm font-semibold text-gray-700">DD/CHEQUE Date</label>
+                                    <label className="w-40 text-sm font-semibold text-gray-700">
+                                        DD/CHEQUE Date
+                                        {(currentEntry.mode_of_pay === 'Cheque' || currentEntry.mode_of_pay === 'DD') && <span className="text-red-500">*</span>}
+                                    </label>
                                     <input
                                         type="date"
-                                        className="flex-1 p-2 border border-gray-300 rounded bg-[#fffced] focus:ring-2 focus:ring-yellow-400 outline-none"
+                                        className={`flex-1 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-yellow-400 outline-none ${currentEntry.mode_of_pay === 'Cash' || currentEntry.mode_of_pay === 'Online' ? 'bg-gray-100 italic' : 'bg-[#fffced]'}`}
+                                        disabled={currentEntry.mode_of_pay === 'Cash' || currentEntry.mode_of_pay === 'Online'}
                                         value={currentEntry.dd_cheque_date}
                                         onChange={(e) => setCurrentEntry({ ...currentEntry, dd_cheque_date: e.target.value })}
                                     />
@@ -631,19 +936,19 @@ function CashBookDetails() {
                         </div>
 
                         {/* Footer Buttons */}
-                        <div className="p-6 bg-gray-50 flex justify-center gap-5 border-t border-gray-300">
+                        <div className="p-6 bg-gray-50/50 flex justify-center gap-4 border-t border-gray-100">
                             <button
                                 onClick={handleSaveEntry}
-                                className="flex items-center gap-2 px-8 py-2.5 bg-[#8da242] text-white font-bold rounded shadow-md hover:bg-[#7a8d38] transition active:scale-95"
+                                className="flex items-center gap-2 px-10 py-3 bg-emerald-600 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all duration-300 active:scale-95"
                             >
-                                <Save size={20} />
-                                Save
+                                <Save size={18} />
+                                Save Entry
                             </button>
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="flex items-center gap-2 px-8 py-2.5 bg-[#8da242] text-white font-bold rounded shadow-md hover:bg-[#7a8d38] transition active:scale-95"
+                                className="flex items-center gap-2 px-10 py-3 bg-white text-gray-500 font-bold uppercase tracking-widest text-[10px] rounded-xl border border-gray-200 hover:bg-gray-50 transition-all duration-300"
                             >
-                                <XCircle size={20} />
+                                <XCircle size={18} />
                                 Cancel
                             </button>
                         </div>
@@ -653,57 +958,135 @@ function CashBookDetails() {
 
             {/* DayBook Close Modal */}
             {showCloseModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-                    <div className="bg-white rounded shadow-2xl w-full max-w-lg overflow-hidden border-[6px] border-[#a3b44b]">
-                        <div className="p-3 bg-[#a3b44b] text-white flex justify-between items-center">
-                            <h2 className="text-xl font-bold italic">DayBook Close</h2>
-                            <button onClick={() => setShowCloseModal(false)} className="text-white hover:bg-white/20 rounded p-1">
-                                <X size={24} />
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-2">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border border-emerald-100 font-sans">
+                        <div className="p-3 bg-emerald-600 text-white flex justify-between items-center relative overflow-hidden">
+                            {/* Decorative background circle */}
+                            <div className="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                            
+                            <div className="relative z-10">
+                                <h2 className="text-base font-black uppercase tracking-tight">DayBook Close</h2>
+                                <p className="text-[8px] font-bold text-emerald-100 uppercase tracking-widest leading-tight">Secure Finalization</p>
+                            </div>
+                            <button onClick={() => setShowCloseModal(false)} className="relative z-10 text-white hover:bg-white/20 rounded-lg p-1 transition-all duration-300">
+                                <X size={20} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-5">
-                            <div className="border-b border-gray-300 pb-2">
-                                <h3 className="text-lg font-bold text-gray-800">DayBook Closing Details</h3>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between gap-4">
-                                    <label className="text-md font-semibold text-gray-700">Transaction date</label>
-                                    <div className="relative w-64">
-                                        <input type="text" readOnly className="w-full bg-[#444] text-[#ffef00] font-bold text-xl px-3 py-1.5 rounded border-2 border-gray-400" value={dayBookClose.date.split('-').reverse().join('/')} />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 bg-white border border-gray-300 p-0.5 rounded cursor-not-allowed">
-                                            <Calendar size={18} className="text-red-400" />
+                        
+                        <div className="p-4 space-y-4">
+                            <div className="space-y-3">
+                                {/* Date Section */}
+                                <div className="flex items-center justify-between p-2.5 bg-emerald-50/50 rounded-lg border border-emerald-100/50">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar size={14} className="text-emerald-600" />
+                                        <div>
+                                            <p className="text-[8px] font-bold text-emerald-700 uppercase tracking-wider">Session Date</p>
+                                            <p className="text-xs font-black text-gray-800">{dayBookClose.date.split('-').reverse().join('/')}</p>
                                         </div>
                                     </div>
+                                    <div className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded uppercase tracking-widest">Active</div>
                                 </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <label className="text-md font-semibold text-gray-700">Credit Amount</label>
-                                    <div className="w-64">
-                                        <input type="text" readOnly className="w-full bg-black text-[#ffef00] font-black text-2xl px-3 py-1 text-right rounded border-2 border-gray-600" value={dayBookClose.creditAmount.toFixed(2)} />
+
+                                {/* Financial Grid */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="p-2.5 bg-gray-50/50 rounded-lg border border-gray-100">
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Opening</p>
+                                        <p className="text-sm font-black text-gray-700">₹{dayBookClose.openingBalance.toLocaleString('en-IN')}</p>
+                                    </div>
+                                    <div className="p-2.5 bg-emerald-50/50 rounded-lg border border-emerald-50">
+                                        <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider">Credits</p>
+                                        <p className="text-sm font-black text-emerald-700">₹{dayBookClose.creditAmount.toLocaleString('en-IN')}</p>
+                                    </div>
+                                    <div className="p-2.5 bg-rose-50/50 rounded-lg border border-rose-50">
+                                        <p className="text-[8px] font-bold text-rose-600 uppercase tracking-wider">Debits</p>
+                                        <p className="text-sm font-black text-rose-700">₹{dayBookClose.debitAmount.toLocaleString('en-IN')}</p>
+                                    </div>
+                                    <div className="p-2.5 bg-blue-50/50 rounded-lg border border-blue-50">
+                                        <p className="text-[8px] font-bold text-blue-600 uppercase tracking-wider">Net</p>
+                                        <p className="text-sm font-black text-blue-700">₹{dayBookClose.dayTotal.toLocaleString('en-IN')}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <label className="text-md font-semibold text-gray-700">Debit Amount</label>
-                                    <div className="w-64">
-                                        <input type="text" readOnly className="w-full bg-black text-[#ffef00] font-black text-2xl px-3 py-1 text-right rounded border-2 border-gray-600" value={dayBookClose.debitAmount.toFixed(2)} />
-                                    </div>
+
+                                {/* Summary Box - Ultra Compact */}
+                                <div className="p-3 bg-[#1e3a8a] rounded-lg shadow-md relative overflow-hidden text-center">
+                                    <div className="absolute right-0 top-0 w-16 h-16 bg-white/5 rounded-full -mr-8 -mt-8"></div>
+                                    <p className="text-[8px] font-bold text-blue-300 uppercase tracking-widest mb-0.5 relative z-10">Grand Closing Balance</p>
+                                    <p className="text-2xl font-black text-white tracking-tighter relative z-10">
+                                        <span className="text-sm mr-1.5 text-blue-300 opacity-80">₹</span>
+                                        {dayBookClose.dayTotal.toLocaleString('en-IN')}
+                                    </p>
                                 </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <label className="text-md font-semibold text-gray-700">Day Total</label>
-                                    <div className="w-64">
-                                        <input type="text" readOnly className="w-full bg-black text-[#ffef00] font-black text-2xl px-3 py-1 text-right rounded border-2 border-gray-600" value={dayBookClose.dayTotal.toFixed(2)} />
-                                    </div>
+
+                                {/* Remarks Section */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest ml-0.5">Closing Remarks</label>
+                                    <textarea 
+                                        rows="2" 
+                                        placeholder="Add notes..."
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none transition-all text-xs font-medium resize-none placeholder:text-gray-300" 
+                                        value={dayBookClose.remarks} 
+                                        onChange={(e) => setDayBookClose({ ...dayBookClose, remarks: e.target.value })}
+                                    ></textarea>
                                 </div>
-                                <div className="flex items-start justify-between gap-4">
-                                    <label className="text-md font-semibold text-gray-700 pt-2">Remarks</label>
-                                    <textarea rows="3" className="w-64 p-2 border-2 border-rose-300 rounded bg-rose-50/30 focus:outline-none" value={dayBookClose.remarks} onChange={(e) => setDayBookClose({ ...dayBookClose, remarks: e.target.value })}></textarea>
+
+                                {/* CRITICAL WARNING */}
+                                <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle size={14} className="text-amber-600 mt-0.5" />
+                                        <p className="text-[9px] font-bold text-amber-800 leading-tight">
+                                            <span className="uppercase block mb-0.5">Finalization Lockdown:</span>
+                                            Closing this book will restrict all GC bookings and payment receipts for this date. This action cannot be undone by regular users.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="pt-4 flex justify-center gap-4">
-                                <button onClick={handleConfirmClose} className="flex items-center gap-2 px-4 py-2 bg-[#8da242] text-white font-bold rounded shadow-md hover:opacity-90 transition active:scale-95"><Save size={20} className="bg-[#1e40af] p-0.5 rounded" />DayBook Close</button>
-                                <button onClick={() => setShowCloseModal(false)} className="flex items-center gap-2 px-6 py-2 bg-[#8da242] text-white font-bold rounded shadow-md hover:opacity-90 transition active:scale-95"><XCircle size={20} className="text-red-500 bg-white rounded-full p-0.5" />Cancel</button>
+
+                            {/* Actions */}
+                            <div className="pt-2 flex gap-2">
+                                <button 
+                                    onClick={handleConfirmClose} 
+                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white font-black uppercase tracking-widest text-[10px] rounded-lg shadow-md shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95"
+                                >
+                                    <CheckCircle size={14} />
+                                    Confirm & Close
+                                </button>
+                                <button 
+                                    onClick={() => setShowCloseModal(false)} 
+                                    className="px-6 py-3 bg-white text-gray-400 font-bold uppercase tracking-widest text-[9px] rounded-lg border border-gray-200 hover:bg-gray-50 transition-all"
+                                >
+                                    Cancel
+                                </button>
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Notification Toast */}
+            {notification.show && (
+                <div className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-4 px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] backdrop-blur-md border animate-in slide-in-from-right duration-500 ${notification.type === 'success'
+                    ? 'bg-emerald-600/95 text-white border-emerald-400/30'
+                    : 'bg-rose-600/95 text-white border-rose-400/30'
+                    }`}>
+                    <div className={`p-2 rounded-full ${notification.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        {notification.type === 'success' ? (
+                            <CheckCircle size={24} className="animate-bounce" />
+                        ) : (
+                            <XCircle size={24} className="animate-shake" />
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-[200px]">
+                        <p className="font-black text-sm uppercase tracking-wider mb-0.5">
+                            {notification.type === 'success' ? 'Task Complete' : 'Error Occurred'}
+                        </p>
+                        <p className="text-xs font-bold opacity-90 leading-relaxed">{notification.message}</p>
+                    </div>
+                    <button
+                        onClick={() => setNotification({ ...notification, show: false })}
+                        className="p-1.5 hover:bg-white/20 rounded-xl transition-all hover:rotate-90"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
             )}
         </div>

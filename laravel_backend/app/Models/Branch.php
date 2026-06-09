@@ -4,11 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Branch extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+
+    protected static function booted()
+    {
+        static::deleting(function ($branch) {
+            $reason = $branch->getDeletionBlockingReason();
+            if ($reason) {
+                throw new \Exception($reason);
+            }
+        });
+    }
 
     /**
      * The table associated with the model.
@@ -31,6 +40,7 @@ class Branch extends Model
         'pincode',
         'phone',
         'email',
+        'taluk',
         'is_active',
     ];
 
@@ -71,6 +81,7 @@ class Branch extends Model
             'pincode' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20|regex:/^[0-9\-\+\(\)\s]{7,20}$/',
             'email' => 'nullable|email|max:100',
+            'taluk' => 'nullable|string|max:100',
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -92,6 +103,7 @@ class Branch extends Model
             'pincode' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20|regex:/^[0-9\-\+\(\)\s]{7,20}$/',
             'email' => 'nullable|email|max:100',
+            'taluk' => 'nullable|string|max:100',
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -122,33 +134,45 @@ class Branch extends Model
                      ->orWhere('state', 'like', "%{$search}%");
     }
 
-    /**
-     * Check if branch has related records.
-     *
-     * @return bool
-     */
-    public function hasRelatedRecords(): bool
+    public function getDeletionBlockingReason(): ?string
     {
-        // Check only for tables that exist in the current schema
-        $relatedTables = ['admins', 'drivers', 'vehicles', 'consignors', 'trip_sheets', 'inward_waybills', 'cash_book_entries'];
+        $reasons = [];
+        $relatedTables = [
+            'admins' => ['col' => 'branch_code', 'label' => 'Employees'],
+            'drivers' => ['col' => 'branch_id', 'label' => 'Drivers'],
+            'vehicles' => ['col' => 'branch_id', 'label' => 'Vehicles'],
+            'consignors' => ['col' => 'branch_id', 'label' => 'Consignors'],
+            'trip_sheets' => ['col' => 'branch_id', 'label' => 'Trip Sheets'],
+            'inward_waybills' => ['col' => 'branch_id', 'label' => 'Inward Waybills'],
+            'cash_book_entries' => ['col' => 'branch_id', 'label' => 'Cash Book Entries'],
+        ];
 
-        foreach ($relatedTables as $table) {
+        foreach ($relatedTables as $table => $info) {
             try {
                 if (\Schema::hasTable($table)) {
-                    $column = ($table === 'admins') ? 'branch_code' : 'branch_id';
-                    $value = ($table === 'admins') ? $this->branch_code : $this->id;
+                    $column = $info['col'];
+                    $value = ($column === 'branch_code') ? $this->branch_code : $this->id;
                     
-                    if (\DB::table($table)->where($column, $value)->exists()) {
-                        return true;
+                    $count = \DB::table($table)->where($column, $value)->count();
+                    if ($count > 0) {
+                        $reasons[] = "{$count} {$info['label']}";
                     }
                 }
             } catch (\Exception $e) {
-                // Table or column doesn't exist, continue
                 continue;
             }
         }
 
-        return false;
+        if (empty($reasons)) {
+            return null;
+        }
+
+        return "Cannot delete: This branch is still linked to " . implode(', ', $reasons) . ".";
+    }
+
+    public function hasRelatedRecords(): bool
+    {
+        return !is_null($this->getDeletionBlockingReason());
     }
 
     /**

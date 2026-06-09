@@ -10,16 +10,22 @@ use Illuminate\Validation\ValidationException;
 
 class ConsignorController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
-            $consignors = Consignor::with('branch')->orderBy('name', 'asc')->get();
+            $query = Consignor::with(['district', 'taluk', 'destination', 'branch']);
+
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $query->where('branch_id', $request->branch_id);
+            }
+
+            $consignors = $query->orderBy('name', 'asc')->get();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Consignors retrieved successfully',
                 'data' => $consignors,
-                            ], 200);
+            ], 200);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -28,7 +34,7 @@ class ConsignorController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $consignor = Consignor::with('branch')->find($id);
+            $consignor = Consignor::with(['district', 'taluk', 'destination'])->find($id);
 
             if (!$consignor) {
                 return $this->errorResponse('Consignor not found', 404);
@@ -48,8 +54,13 @@ class ConsignorController extends Controller
     {
         try {
             $validated = $request->validate(Consignor::createRules());
+            
+            if (empty($validated['code'])) {
+                $validated['code'] = 'CON-' . strtoupper(substr(uniqid(), -8));
+            }
+
             $consignor = Consignor::create($validated);
-            $consignor->load('branch');
+
 
             return response()->json([
                 'success' => true,
@@ -78,12 +89,12 @@ class ConsignorController extends Controller
 
             $validated = $request->validate(Consignor::updateRules($id));
             $consignor->update($validated);
-            $consignor->load('branch');
+
 
             return response()->json([
                 'success' => true,
                 'message' => 'Consignor updated successfully',
-                'data' => $consignor->fresh(),
+                'data' => $consignor->load(['district', 'taluk', 'destination']),
                             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
@@ -127,18 +138,24 @@ class ConsignorController extends Controller
                 return $this->errorResponse('Search query is required', 400);
             }
 
-            $consignors = Consignor::with('branch');
+            $consignors = Consignor::query();
 
-            if ($searchBy === 'code') {
-                $consignors = $consignors->where('code', 'like', "%{$query}%");
-            } else {
-                $consignors = $consignors->where('name', 'like', "%{$query}%")
-                    ->orWhere('code', 'like', "%{$query}%")
-                    ->orWhere('tin_number', 'like', "%{$query}%")
-                    ->orWhere('gst_number', 'like', "%{$query}%");
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $consignors->where('branch_id', $request->branch_id);
             }
 
-            $consignors = $consignors->get();
+            if ($searchBy === 'code') {
+                $consignors->where('code', 'like', "%{$query}%");
+            } else {
+                $consignors->where(function(\Illuminate\Database\Eloquent\Builder $q) use ($query) {
+                    $q->where('name', 'like', "%{$query}%")
+                      ->orWhere('code', 'like', "%{$query}%")
+                      ->orWhere('tin_number', 'like', "%{$query}%")
+                      ->orWhere('gst_number', 'like', "%{$query}%");
+                });
+            }
+
+            $consignors = $consignors->with(['district', 'taluk', 'destination', 'branch'])->get();
 
             return response()->json([
                 'success' => true,

@@ -4,11 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Driver extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+
+    protected static function booted()
+    {
+        static::deleting(function ($driver) {
+            $tripCount = \DB::table('trip_sheets')->where('driver_id', $driver->id)->count();
+            if ($tripCount > 0) {
+                throw new \Exception("Cannot delete: This driver is associated with {$tripCount} trip sheets.");
+            }
+        });
+    }
 
     protected $table = 'drivers';
 
@@ -32,8 +41,14 @@ class Driver extends Model
         'is_active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
+
+    protected $appends = ['driver_name'];
+
+    public function getDriverNameAttribute()
+    {
+        return $this->name;
+    }
 
     public static function createRules(): array
     {

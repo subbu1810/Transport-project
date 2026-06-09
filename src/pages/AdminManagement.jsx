@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import {
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import {
     Plus, Edit2, Trash2, Search, X, Save, ShieldCheck,
     User, Mail, Phone, MapPin, Shield, Lock, Building, Hash, Eye, EyeOff, Info
 } from 'lucide-react'
-
-const API_URL = 'http://localhost:8000/api/v1'
 
 const InputField = ({ label, icon: Icon, type = 'text', value, onChange, placeholder, required = false, disabled = false, error = false }) => (
     <div className="space-y-1.5 flex-1">
@@ -42,10 +41,11 @@ function BranchManagement() {
 
     const [formData, setFormData] = useState({
         name: '',
+        full_name: '', // Added to sync with backend
         phone_number: '',
         email: '',
         address: '',
-        role: 'ADMIN',
+        role: 'admin',
         password: '',
         branch_code: '',
         branch_name: '',
@@ -70,7 +70,7 @@ function BranchManagement() {
     const fetchAdmins = async () => {
         try {
             setLoading(true)
-            const response = await fetch(`${API_URL}/admins`)
+            const response = await fetch(`${API_BASE_URL}/admins`)
             const data = await response.json()
 
             if (data.success) {
@@ -93,8 +93,8 @@ function BranchManagement() {
 
         try {
             const url = editingAdmin
-                ? `${API_URL}/admins/${editingAdmin.id}`
-                : `${API_URL}/admins`
+                ? `${API_BASE_URL}/admins/${editingAdmin.id}`
+                : `${API_BASE_URL}/admins`
 
             const method = editingAdmin ? 'PUT' : 'POST'
 
@@ -149,7 +149,7 @@ function BranchManagement() {
         }
 
         try {
-            const response = await fetch(`${API_URL}/admins/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/admins/${id}`, {
                 method: 'DELETE'
             })
 
@@ -170,10 +170,11 @@ function BranchManagement() {
         setEditingAdmin(admin)
         setFormData({
             name: admin.name || '',
+            full_name: admin.full_name || admin.name || '',
             phone_number: admin.phone_number || '',
             email: admin.email || '',
             address: admin.address || '',
-            role: admin.role || 'ADMIN',
+            role: admin.role || 'admin',
             password: '',
             branch_code: admin.branch_code || '',
             branch_name: admin.branch_name || '',
@@ -191,10 +192,11 @@ function BranchManagement() {
     const resetForm = () => {
         setFormData({
             name: '',
+            full_name: '',
             phone_number: '',
             email: '',
             address: '',
-            role: 'ADMIN',
+            role: 'admin',
             password: '',
             branch_code: '',
             branch_name: '',
@@ -269,7 +271,7 @@ function BranchManagement() {
                         <h1 className="text-4xl font-black text-gray-800 tracking-tight">Branch Management</h1>
                     </div>
                     <p className="text-gray-500 font-bold ml-16 flex items-center gap-2 italic">
-                        Configuring the operational units of SRK Logistics
+                        Configuring the operational units of {currentUser?.transport_name || 'the system'}
                     </p>
                 </div>
                 <button
@@ -446,8 +448,14 @@ function BranchManagement() {
 
                                     <div className="bg-gray-50/50 rounded-[2.5rem] p-8 space-y-6 border border-gray-100/50">
                                         <InputField
-                                            label="Full Name" icon={User} required
+                                            label="Login Username" icon={Shield} required
                                             value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            placeholder="e.g., bangalore_admin"
+                                            disabled={editingAdmin ? true : false}
+                                        />
+                                        <InputField
+                                            label="Full Name" icon={User} required
+                                            value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                                             placeholder="e.g., John Doe"
                                         />
                                         <InputField
@@ -475,9 +483,9 @@ function BranchManagement() {
                                                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                                         className="w-full pl-12 pr-4 py-3 bg-white border-2 border-gray-50 rounded-2xl outline-none transition-all font-bold text-gray-700 appearance-none focus:border-green-500/50 focus:ring-4 focus:ring-green-500/5 shadow-sm"
                                                     >
-                                                        <option value="ADMIN">ADMIN</option>
-                                                        <option value="MANAGER">MANAGER</option>
-                                                        <option value="OPERATOR">OPERATOR</option>
+                                                        <option value="admin">ADMIN</option>
+                                                        <option value="manager">MANAGER</option>
+                                                        <option value="operator">OPERATOR</option>
                                                     </select>
                                                 </div>
                                             </div>
@@ -574,14 +582,12 @@ function BranchManagement() {
                                             <InputField
                                                 label="Transport Name" icon={Building} required
                                                 value={formData.transport_name} onChange={(e) => setFormData({ ...formData, transport_name: e.target.value })}
-                                                placeholder="e.g., Sri Ganesh Road Lines"
-                                                disabled={editingAdmin ? false : true}
+                                                placeholder="e.g., Your Business Name"
                                             />
                                             <InputField
                                                 label="Transport Phone" icon={Phone}
                                                 value={formData.transport_phone} onChange={(e) => setFormData({ ...formData, transport_phone: e.target.value })}
                                                 placeholder="+91 00000 00000"
-                                                disabled={editingAdmin ? false : true}
                                             />
                                         </div>
                                         <div className="space-y-1.5 flex-1">
@@ -596,8 +602,7 @@ function BranchManagement() {
                                                     rows="3"
                                                     value={formData.transport_address}
                                                     onChange={(e) => setFormData({ ...formData, transport_address: e.target.value })}
-                                                    disabled={editingAdmin ? false : true}
-                                                    className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-50 rounded-[1.5rem] outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 shadow-sm focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/5 resize-none disabled:bg-gray-100 disabled:text-gray-500"
+                                                    className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-50 rounded-[1.5rem] outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 shadow-sm focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/5 resize-none"
                                                     placeholder="Main business address..."
                                                 />
                                             </div>

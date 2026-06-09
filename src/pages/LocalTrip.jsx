@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Plus, Trash2, Save, RotateCcw, Truck, MapPin, Loader2, CheckCircle2, AlertCircle, X, ChevronDown } from 'lucide-react'
-
-const API_URL = 'http://localhost:8000/api/v1'
+import { Search, Plus, Trash2, Save, RotateCcw, Truck, MapPin, Loader2, CheckCircle2, AlertCircle, X, ChevronDown, HelpCircle } from 'lucide-react'
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
 
 function LocalTrip() {
     const [actionType, setActionType] = useState('NEW')
@@ -10,6 +9,8 @@ function LocalTrip() {
     const [saveLoading, setSaveLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
+    const [popup, setPopup] = useState(null) // { type: 'success'|'error', title, message }
+    const [showHelp, setShowHelp] = useState(false)
 
     const [isSelectingGC, setIsSelectingGC] = useState(false)
     const [gcSearchTerm, setGcSearchTerm] = useState('')
@@ -19,7 +20,8 @@ function LocalTrip() {
         driver_id: '',
         trip_date: new Date().toISOString().split('T')[0],
         remarks: '',
-        advance_amount: ''
+        advance_amount: '',
+        opening_km: ''
     })
 
     const [selectedGcDetails, setSelectedGcDetails] = useState([])
@@ -44,14 +46,14 @@ function LocalTrip() {
     const fetchMasterData = async (user) => {
         try {
             const waybillUrl = (user && user.role !== 'superadmin')
-                ? `${API_URL}/waybills?status=RECEIVED&branch_id=${user.branch_id}`
-                : `${API_URL}/waybills?status=RECEIVED`
+                ? `${API_BASE_URL}/waybills?status=RECEIVED&branch_id=${user.branch_id}`
+                : `${API_BASE_URL}/waybills?status=RECEIVED`
 
             const [vRes, dRes, wRes, bRes] = await Promise.all([
-                fetch(`${API_URL}/vehicles`),
-                fetch(`${API_URL}/drivers`),
+                fetch(`${API_BASE_URL}/vehicles`),
+                fetch(`${API_BASE_URL}/drivers`),
                 fetch(waybillUrl),
-                fetch(`${API_URL}/branches`)
+                fetch(`${API_BASE_URL}/branches`)
             ])
             const [vData, dData, wData, bData] = await Promise.all([
                 vRes.json(), dRes.json(), wRes.json(), bRes.json()
@@ -66,13 +68,35 @@ function LocalTrip() {
         }
     }
 
+    const handleVehicleChange = async (vid) => {
+        setFormData(prev => ({ ...prev, vehicle_id: vid }))
+        if (!vid || actionType === 'EDIT') return
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/trip-sheets/check-vehicle/${vid}?requesting_branch_id=${branchId}`)
+            const data = await response.json()
+            if (data.success && !data.available) {
+                setPopup({
+                    type: 'error',
+                    title: 'Vehicle Busy!',
+                    message: data.message || 'This vehicle is currently on another trip and has not been verified.'
+                })
+                setFormData(prev => ({ ...prev, vehicle_id: '' }))
+                return
+            }
+        } catch (err) {
+            console.error('Error checking vehicle availability:', err)
+        }
+    }
+
     const handleReset = () => {
         setFormData({
             vehicle_id: '',
             driver_id: '',
             trip_date: new Date().toISOString().split('T')[0],
             remarks: '',
-            advance_amount: ''
+            advance_amount: '',
+            opening_km: ''
         })
         setSelectedGcDetails([])
         setTempSelectedGcs([])
@@ -122,7 +146,7 @@ function LocalTrip() {
                 branch_id: branchId
             }
             const method = actionType === 'NEW' ? 'POST' : 'PUT'
-            const url = actionType === 'NEW' ? `${API_URL}/local-trips` : `${API_URL}/local-trips/${tripNo}`
+            const url = actionType === 'NEW' ? `${API_BASE_URL}/local-trips` : `${API_BASE_URL}/local-trips/${tripNo}`
             const response = await fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
@@ -260,6 +284,13 @@ function LocalTrip() {
                         <Truck size={18} />
                     </div>
                     <h1 className="text-xl font-bold text-gray-800 tracking-tight">Local Trip</h1>
+                    <button
+                        onClick={() => setShowHelp(true)}
+                        className="p-1.5 bg-white text-purple-600 rounded-full shadow-sm hover:shadow-md hover:bg-purple-50 transition-all border border-purple-100 group"
+                        title="Local Trip Guide"
+                    >
+                        <HelpCircle size={18} className="group-hover:scale-110 transition-transform" />
+                    </button>
                 </div>
                 <div className="flex gap-2">
                     {success && (
@@ -273,6 +304,31 @@ function LocalTrip() {
                         </div>
                     )}
                 </div>
+
+            {/* Popup Modal */}
+            {popup && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100">
+                        <div className={`p-6 flex flex-col items-center text-center space-y-3 ${popup.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${popup.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                {popup.type === 'success' ? <CheckCircle2 size={28} /> : <AlertCircle size={28} />}
+                            </div>
+                            <div>
+                                <h3 className={`text-lg font-black uppercase tracking-tight ${popup.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>{popup.title}</h3>
+                                <p className="text-gray-600 text-xs font-medium mt-1 leading-relaxed whitespace-pre-line">{popup.message}</p>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 border-t border-gray-100">
+                            <button
+                                onClick={() => setPopup(null)}
+                                className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md ${popup.type === 'success' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                            >
+                                DISMISS
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-4 space-y-4 border border-gray-100">
@@ -336,7 +392,7 @@ function LocalTrip() {
                             <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Vehicle No <span className="text-red-500">*</span></label>
                             <select
                                 value={formData.vehicle_id}
-                                onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                                onChange={(e) => handleVehicleChange(e.target.value)}
                                 className="w-full px-2 py-1.5 border border-gray-200 rounded-lg focus:border-purple-500 outline-none font-bold text-gray-700 text-[11px] bg-white"
                             >
                                 <option value="">Select Vehicle</option>
@@ -387,7 +443,7 @@ function LocalTrip() {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Advance Amount</label>
                             <input
@@ -395,6 +451,16 @@ function LocalTrip() {
                                 value={formData.advance_amount}
                                 onChange={(e) => setFormData({ ...formData, advance_amount: e.target.value })}
                                 placeholder="0.00"
+                                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg focus:border-purple-500 outline-none font-bold text-gray-700 text-[11px]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Opening KM</label>
+                            <input
+                                type="number"
+                                value={formData.opening_km}
+                                onChange={(e) => setFormData({ ...formData, opening_km: e.target.value })}
+                                placeholder="0"
                                 className="w-full px-2 py-1.5 border border-gray-200 rounded-lg focus:border-purple-500 outline-none font-bold text-gray-700 text-[11px]"
                             />
                         </div>
@@ -497,6 +563,89 @@ function LocalTrip() {
                 </div>
 
             </div>
+
+            {/* Help Modal */}
+            {showHelp && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-purple-100">
+                        <div className="p-6 bg-gradient-to-r from-purple-600 to-indigo-700 text-white flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-lg">
+                                    <HelpCircle size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold">Local Trip Guide</h2>
+                                    <p className="text-purple-100 text-xs">Managing branch-to-branch movements</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowHelp(false)}
+                                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 text-purple-700 font-bold uppercase text-xs tracking-wider">
+                                        <span className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">1</span>
+                                        Setup Trip
+                                    </div>
+                                    <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                                        <li>• Select a <span className="font-semibold text-gray-800">Vehicle</span> and <span className="font-semibold text-gray-800">Driver</span>.</li>
+                                        <li>• Ensure the <span className="font-semibold text-gray-800">Trip Date</span> is correct for accurate logging.</li>
+                                    </ul>
+                                </section>
+
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 text-blue-700 font-bold uppercase text-xs tracking-wider">
+                                        <span className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">2</span>
+                                        GC Eligibility
+                                    </div>
+                                    <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                                        <li>• Only waybills with <span className="font-semibold text-gray-800 uppercase text-xs">Received</span> status are available for local trips.</li>
+                                        <li>• Use <span className="font-semibold text-gray-800 uppercase text-xs">Choose GC</span> to filter and select waybills.</li>
+                                    </ul>
+                                </section>
+
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 text-amber-700 font-bold uppercase text-xs tracking-wider">
+                                        <span className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">3</span>
+                                        Financials
+                                    </div>
+                                    <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                                        <li>• Record <span className="font-semibold text-gray-800">Advance Amounts</span> paid to drivers for fuel or expenses.</li>
+                                        <li>• Use <span className="font-semibold text-gray-800">Remarks</span> for any loading/unloading specific notes.</li>
+                                    </ul>
+                                </section>
+
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 text-green-700 font-bold uppercase text-xs tracking-wider">
+                                        <span className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">★</span>
+                                        Operational Tip
+                                    </div>
+                                    <div className="ml-10">
+                                        <p className="text-xs text-gray-500 leading-relaxed italic">
+                                            Local trips help track short-distance vehicle movements between local hubs or branches before final delivery.
+                                        </p>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setShowHelp(false)}
+                                className="px-6 py-2 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-all shadow-lg"
+                            >
+                                Got It
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

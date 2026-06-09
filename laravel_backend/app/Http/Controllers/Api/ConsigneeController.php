@@ -10,16 +10,22 @@ use Illuminate\Validation\ValidationException;
 
 class ConsigneeController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
-            $consignees = Consignee::with(['destination.taluk.district.state'])->orderBy('name', 'asc')->get();
+            $query = Consignee::with(['destination.taluk.district.state', 'branch']);
+
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $query->where('branch_id', $request->branch_id);
+            }
+
+            $consignees = $query->orderBy('name', 'asc')->get();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Consignees retrieved successfully',
                 'data' => $consignees,
-                            ], 200);
+            ], 200);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -48,6 +54,11 @@ class ConsigneeController extends Controller
     {
         try {
             $validated = $request->validate(Consignee::createRules());
+            
+            if (empty($validated['code'])) {
+                $validated['code'] = 'CNS-' . strtoupper(substr(uniqid(), -8));
+            }
+
             $consignee = Consignee::create($validated);
             $consignee->load(['destination.taluk.district.state']);
 
@@ -127,16 +138,22 @@ class ConsigneeController extends Controller
                 return $this->errorResponse('Search query is required', 400);
             }
 
-            $consignees = Consignee::with(['destination.taluk.district.state']);
+            $consignees = Consignee::with(['destination.taluk.district.state', 'branch']);
+
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $consignees->where('branch_id', $request->branch_id);
+            }
 
             if ($searchBy === 'code') {
-                $consignees = $consignees->where('code', 'like', "%{$query}%");
+                $consignees->where('code', 'like', "%{$query}%");
             } else {
-                $consignees = $consignees->where('name', 'like', "%{$query}%")
-                    ->orWhere('code', 'like', "%{$query}%")
-                    ->orWhere('gst_number', 'like', "%{$query}%")
-                    ->orWhere('address', 'like', "%{$query}%")
-                    ->orWhere('mobile_number', 'like', "%{$query}%");
+                $consignees->where(function(\Illuminate\Database\Eloquent\Builder $q) use ($query) {
+                    $q->where('name', 'like', "%{$query}%")
+                        ->orWhere('code', 'like', "%{$query}%")
+                        ->orWhere('gst_number', 'like', "%{$query}%")
+                        ->orWhere('address', 'like', "%{$query}%")
+                        ->orWhere('mobile_number', 'like', "%{$query}%");
+                });
             }
 
             $consignees = $consignees->get();

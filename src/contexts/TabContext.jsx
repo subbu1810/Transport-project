@@ -8,32 +8,49 @@ export function TabProvider({ children }) {
   ])
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showLimitModal, setShowLimitModal] = useState(false)
+  const [tabData, setTabData] = useState({})
 
-  const addTab = (title, path, component) => {
-    const existingTab = tabs.find(tab => tab.path === path)
+  const addTab = (title, path, data = null) => {
+    const id = path.replace('/', '') || 'dashboard'
 
+    if (data) {
+      setTabData(prev => ({ ...prev, [id]: data }))
+    }
+
+    const existingTab = tabs.find(tab => tab.id === id)
     if (existingTab) {
-      setActiveTab(existingTab.id)
+      setActiveTab(id)
       return
     }
 
-    // Check if we reached the limit of 6 tabs (excluding dashboard)
+    // Check if we reached the limit of 8 tabs (excluding dashboard)
     const extraTabsCount = tabs.filter(tab => tab.id !== 'dashboard').length
-    if (extraTabsCount >= 6) {
+    if (extraTabsCount >= 8) {
       setShowLimitModal(true)
       return
     }
 
     const newTab = {
-      id: path.replace('/', '') || 'dashboard',
+      id,
       title,
       path,
-      component,
       active: true
     }
 
     setTabs(prev => [...prev, newTab])
-    setActiveTab(newTab.id)
+    setActiveTab(id)
+  }
+
+  const setTabDataForTab = (tabId, data) => {
+    setTabData(prev => ({ ...prev, [tabId]: data }))
+  }
+
+  const clearTabData = (tabId) => {
+    setTabData(prev => {
+      const next = { ...prev }
+      delete next[tabId]
+      return next
+    })
   }
 
   const closeTab = (tabId) => {
@@ -44,6 +61,9 @@ export function TabProvider({ children }) {
 
     const newTabs = tabs.filter(tab => tab.id !== tabId)
     setTabs(newTabs)
+
+    // Also clear its data
+    clearTabData(tabId)
 
     if (activeTab === tabId) {
       const lastTab = newTabs[newTabs.length - 1]
@@ -58,11 +78,14 @@ export function TabProvider({ children }) {
   const value = {
     tabs,
     activeTab,
+    tabData,
     showLimitModal,
     setShowLimitModal,
     addTab,
     closeTab,
-    switchTab
+    switchTab,
+    setTabDataForTab,
+    clearTabData
   }
 
   return (

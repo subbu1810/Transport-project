@@ -118,6 +118,25 @@ class DistrictController extends Controller
         }
     }
 
+    public function getByState(int $stateId): JsonResponse
+    {
+        try {
+            $districts = District::with('state')
+                ->where('state_id', $stateId)
+                ->where('is_active', true)
+                ->orderBy('name', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Districts retrieved successfully',
+                'data' => $districts,
+            ], 200);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
     public function search(Request $request): JsonResponse
     {
         try {

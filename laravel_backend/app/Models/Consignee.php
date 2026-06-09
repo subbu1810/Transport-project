@@ -4,11 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Consignee extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected $table = 'consignees';
 
@@ -20,6 +19,7 @@ class Consignee extends Model
         'land_number',
         'mobile_number',
         'destination_id',
+        'branch_id',
         'is_active',
     ];
 
@@ -27,19 +27,19 @@ class Consignee extends Model
         'is_active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
     public static function createRules(): array
     {
         return [
             'name' => 'required|string|max:100',
-            'code' => 'required|string|max:20|unique:consignees,code',
-            'gst_number' => 'nullable|string|max:20|unique:consignees,gst_number',
-            'address' => 'required|string|max:255',
+            'code' => 'nullable|string|max:20|unique:consignees,code',
+            'gst_number' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:255',
             'land_number' => 'nullable|string|max:20',
-            'mobile_number' => 'required|string|max:20',
+            'mobile_number' => 'nullable|string|max:20',
             'destination_id' => 'required|integer|exists:destinations,id',
+            'branch_id' => 'required|integer|exists:branches,id',
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -49,11 +49,12 @@ class Consignee extends Model
         return [
             'name' => 'nullable|string|max:100',
             'code' => "nullable|string|max:20|unique:consignees,code,{$id}",
-            'gst_number' => "nullable|string|max:20|unique:consignees,gst_number,{$id}",
+            'gst_number' => "nullable|string|max:20",
             'address' => 'nullable|string|max:255',
             'land_number' => 'nullable|string|max:20',
             'mobile_number' => 'nullable|string|max:20',
             'destination_id' => 'nullable|integer|exists:destinations,id',
+            'branch_id' => 'required|integer|exists:branches,id',
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -65,16 +66,21 @@ class Consignee extends Model
 
     public function taluk()
     {
-        return $this->hasOneThrough(Taluk::class, Destination::class, 'id', 'id', 'destination_id', 'taluk_id');
+        return $this->destination()->get()->first()?->taluk();
     }
 
     public function district()
     {
-        return $this->hasOneThrough(District::class, [Destination::class, Taluk::class], ['id', 'taluk_id'], ['destination_id', 'district_id']);
+        return $this->taluk()?->get()->first()?->district();
     }
 
     public function state()
     {
-        return $this->hasOneThrough(State::class, [Destination::class, Taluk::class, District::class], ['id', 'taluk_id', 'district_id'], ['destination_id', 'taluk_id', 'state_id']);
+        return $this->district()?->get()->first()?->state();
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

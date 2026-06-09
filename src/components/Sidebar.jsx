@@ -20,8 +20,17 @@ import {
   FileEdit,
   LocateFixed,
   CheckSquare,
-  Image as ImageIcon
+  Users,
+  Image as ImageIcon,
+  GitBranch,
+  ShieldCheck,
+  Printer,
+  Fuel,
+  Headphones,
+  Database
 } from 'lucide-react'
+
+import { API_BASE_URL } from '../config/api'
 
 function Sidebar({ isOpen, onToggle }) {
   const [expandedMenu, setExpandedMenu] = useState(null)
@@ -35,10 +44,13 @@ function Sidebar({ isOpen, onToggle }) {
     if (userStr) {
       try {
         const user = JSON.parse(userStr)
-        setUserRole(user.role || 'admin')
+        const role = (user.role || 'admin').toLowerCase()
+        setUserRole(role)
 
-        if (user.role !== 'superadmin' && user.id) {
-          fetch(`http://localhost:8000/api/v1/screen-assignments/admin/${user.id}`)
+        // Fetch assignments for all roles except superadmin 
+        // superadmin gets all screens by default
+        if (role !== 'superadmin' && user.id) {
+          fetch(`${API_BASE_URL}/screen-assignments/admin/${user.id}`)
             .then(res => res.json())
             .then(data => {
               if (data.success && Array.isArray(data.data)) {
@@ -47,7 +59,9 @@ function Sidebar({ isOpen, onToggle }) {
             })
             .catch(err => console.error(err))
         }
-      } catch (e) { console.error(e) }
+      } catch (e) {
+        console.error('Sidebar Init Error:', e)
+      }
     }
   }, [])
 
@@ -61,6 +75,8 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Role Details', path: '/role-details', icon: LayoutDashboard },
         { label: 'Screen Assignment', path: '/screen-assignment', icon: LayoutDashboard },
         { label: 'Manage Logo', path: '/manage-logo', icon: ImageIcon },
+        { label: 'Manage UPI', path: '/manage-upi', icon: CreditCard },
+        { label: 'Employee Management', path: '/employee-management', icon: Users },
       ]
     },
     {
@@ -75,11 +91,28 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Consignor Master', path: '/consignor-master', icon: LayoutDashboard },
         { label: 'Consignee Master', path: '/consignee-master', icon: LayoutDashboard },
         { label: 'Rate Details', path: '/rate-details', icon: LayoutDashboard },
-        { label: 'GC Details', path: '/gc-details', icon: LayoutDashboard },
-        { label: 'Driver Details', path: '/driver-details', icon: LayoutDashboard },
-        { label: 'Vehicle Details', path: '/vehicle-details', icon: LayoutDashboard },
         { label: 'Bunk Details', path: '/bunk-details', icon: LayoutDashboard },
         { label: 'Transport Master', path: '/transport-master', icon: LayoutDashboard },
+        { label: 'Route Mapping', path: '/route-master', icon: GitBranch },
+      ]
+    },
+    {
+      label: 'Vehicle Management',
+      icon: Truck,
+      submenu: [
+        { label: 'Vehicle Details', path: '/vehicle-details', icon: Truck },
+        { label: 'Driver Details', path: '/driver-details', icon: Users },
+        { label: 'Settlement History', path: '/settlement-history', icon: FileText },
+      ]
+    },
+    {
+      label: 'Fuel Management',
+      icon: Fuel,
+      submenu: [
+        { label: 'Fuel Token Entry', path: '/fuel-token-entry', icon: FileText },
+        { label: 'Bunk Bill Entry', path: '/bunk-bill-entry', icon: FileEdit },
+        { label: 'Bunk Payment Entry', path: '/bunk-payment-entry', icon: CreditCard },
+        { label: 'Bunk Ledger Report', path: '/bunk-ledger-report', icon: BarChart3 },
       ]
     },
     {
@@ -89,7 +122,6 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'GC Entry', path: '/gc-entry', icon: FileText },
         { label: 'GC Modify', path: '/gc-modify', icon: FileEdit },
         { label: 'GC Track', path: '/gc-track', icon: LocateFixed },
-        { label: 'Receive GC Ack', path: '/receive-gc-ack', icon: CheckSquare },
         { label: 'GC Print', path: '/gc-print', icon: FileText },
         { label: 'GC Report', path: '/gc-report', icon: FileText },
         { label: 'WayBill Admin/Edit', path: '/waybill-admin-edit', icon: FileText },
@@ -102,6 +134,7 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Head Details', path: '/head-details', icon: DollarSign },
         { label: 'Cash Book Details', path: '/cash-book-details', icon: DollarSign },
         { label: 'Cash Book Report', path: '/cash-book-report', icon: DollarSign },
+        { label: 'Maintenance Billing', path: '/maintenance-billing', icon: CreditCard },
       ]
     },
     {
@@ -110,9 +143,7 @@ function Sidebar({ isOpen, onToggle }) {
       submenu: [
         { label: 'Bulk GC Inward', path: '/bulk-gc-inward', icon: TrendingUp },
         { label: 'Receive Inward', path: '/receive-inward', icon: TrendingUp },
-        { label: 'Inward GC Ack', path: '/inward-gc-ack', icon: TrendingUp },
         { label: 'Inward Report', path: '/inward-report', icon: TrendingUp },
-        { label: 'Local Trip', path: '/local-trip', icon: Truck },
       ]
     },
     {
@@ -120,9 +151,10 @@ function Sidebar({ isOpen, onToggle }) {
       icon: Truck,
       submenu: [
         { label: 'Trip Sheet Entry', path: '/trip-sheet-entry', icon: Truck },
-        { label: 'Trip Sheet Ack', path: '/trip-sheet-ack', icon: Truck },
+        { label: 'Local Trip Entry', path: '/local-trip-entry', icon: Truck },
+        { label: 'Trip Sheet Ack & Settle', path: '/trip-sheet-ack', icon: Truck },
         { label: 'Trip Sheet Report', path: '/trip-sheet-report', icon: Truck },
-        { label: 'Trip Sheet Verification', path: '/trip-sheet-verification', icon: Truck },
+        { label: 'Local Trip Report', path: '/local-trip-report', icon: Truck },
         { label: 'Trip Sheet Alert', path: '/trip-sheet-alert', icon: Truck },
         { label: 'Trip Sheet Payment', path: '/trip-sheet-payment', icon: Truck },
       ]
@@ -132,26 +164,20 @@ function Sidebar({ isOpen, onToggle }) {
       icon: CheckCircle2,
       submenu: [
         { label: 'Update Delivery', path: '/update-delivery', icon: CheckCircle2 },
+        { label: 'Upload POD', path: '/upload-pod', icon: ImageIcon },
         { label: 'Delivered GC Report', path: '/delivered-gc-report', icon: BarChart3 },
         { label: 'Undelivered GC Report', path: '/undelivered-gc-report', icon: BarChart3 },
+        { label: 'Cancelled GC Report', path: '/cancelled-gc-report', icon: BarChart3 },
         { label: 'RTO Report', path: '/rto-report', icon: BarChart3 },
+        { label: 'Pending POD Report', path: '/pending-pod-report', icon: BarChart3 },
       ]
     },
-
-
     {
       label: 'Consignor Report',
-      icon: BarChart3,
+      icon: Package,
       submenu: [
-        { label: 'Consignor Report', path: '/consignor-report-prepare', icon: BarChart3 },
-      ]
-    },
-    {
-      label: 'Unload Report',
-      icon: Download,
-      submenu: [
-        { label: 'Unload Report Prepare', path: '/unload-report-prepare', icon: Download },
-        { label: 'Unload Report View', path: '/unload-report-view', icon: Download },
+        { label: 'Consignor Report Prepare', path: '/consignor-report-prepare', icon: Package },
+        { label: 'Consignor Report View', path: '/consignor-report-view', icon: Package },
       ]
     },
     {
@@ -160,6 +186,7 @@ function Sidebar({ isOpen, onToggle }) {
       submenu: [
         { label: 'Generate Ack Report ID', path: '/generate-ack-report-id', icon: CheckCircle },
         { label: 'Ack Report ID View', path: '/ack-report-id-view', icon: CheckCircle },
+        { label: 'Ack ID Report', path: '/ack-report-bundle', icon: CheckCircle },
       ]
     },
     {
@@ -167,7 +194,8 @@ function Sidebar({ isOpen, onToggle }) {
       icon: CreditCard,
       submenu: [
         { label: 'GC Wise Receive', path: '/gc-wise-receive', icon: CreditCard },
-        { label: 'Consignor Wise Receive', path: '/consignor-wise-receive', icon: CreditCard },
+        { label: 'Consignor Wise Receive With Id', path: '/consignor-wise-receive', icon: CreditCard },
+        { label: 'Consignor Wise Receive Without Id', path: '/consignor-wise-receive-without-id', icon: CreditCard },
         { label: 'Payment Pending Report', path: '/payment-pending-report', icon: CreditCard },
       ]
     },
@@ -175,17 +203,12 @@ function Sidebar({ isOpen, onToggle }) {
       label: 'Reports',
       icon: BarChart3,
       submenu: [
-        { label: 'Waybill Track', path: '/waybill-track', icon: BarChart3 },
         { label: 'Waybill Report', path: '/waybill-report', icon: BarChart3 },
-        { label: 'Consignor Report', path: '/consignor-report-reports', icon: BarChart3 },
         { label: 'Dispatch Pending Report', path: '/dispatch-pending-report', icon: BarChart3 },
-        { label: 'Trip Sheet Report', path: '/trip-sheet-report-reports', icon: BarChart3 },
         { label: 'Audit Log Info', path: '/audit-log-info', icon: BarChart3 },
         { label: 'Inward Status Report', path: '/inward-status-report', icon: BarChart3 },
         { label: 'Ack Status Report', path: '/ack-status-report', icon: BarChart3 },
-        { label: 'Change Password', path: '/change-password', icon: BarChart3 },
         { label: 'HeadWise Report', path: '/headwise-report', icon: BarChart3 },
-        { label: 'CashBook Report', path: '/cashbook-report', icon: BarChart3 },
         { label: 'Balance Sheet', path: '/balance-sheet', icon: BarChart3 },
         { label: 'Booking And Dispatch', path: '/booking-and-dispatch', icon: BarChart3 },
         { label: 'Profit And Loss Report', path: '/profit-and-loss-report', icon: BarChart3 },
@@ -195,6 +218,30 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Income/Expense Report', path: '/income-expense-report', icon: BarChart3 },
         { label: 'Trip Sheet Tally Report', path: '/trip-sheet-tally-report', icon: BarChart3 },
       ]
+    },
+    {
+      label: 'Route Management',
+      icon: GitBranch,
+      submenu: [
+        { label: 'Route Mapping', path: '/route-master', icon: GitBranch },
+        { label: 'Route Trip Entry', path: '/route-trip-entry', icon: Truck },
+        { label: 'Route Analytics', path: '/route-analytics', icon: BarChart3 },
+      ]
+    },
+    {
+      label: 'Security Settings',
+      icon: ShieldCheck,
+      submenu: [
+        { label: 'Application Flow', path: '/app-workflow', icon: GitBranch },
+        { label: 'Change Password', path: '/change-password', icon: Settings },
+        { label: 'GC Format Print/Download', path: '/gc-format-print', icon: Printer },
+        { label: 'Backup Options', path: '/backup-options', icon: Database },
+      ]
+    },
+    {
+      label: 'Technical Support',
+      icon: Headphones,
+      path: '/technical-support'
     }
   ]
 
@@ -210,10 +257,14 @@ function Sidebar({ isOpen, onToggle }) {
 
           // For regular admin, filter submenus based on assignments
           if (item.submenu) {
-            const visibleSubmenus = item.submenu.filter(sub => allowedScreens.includes(sub.path))
+            const visibleSubmenus = item.submenu.filter(sub =>
+              allowedScreens.includes(sub.path) || sub.path === '/change-password'
+            )
             if (visibleSubmenus.length === 0) return null
             return { ...item, submenu: visibleSubmenus }
           }
+
+          if (item.path === '/technical-support') return item
 
           return null
         })

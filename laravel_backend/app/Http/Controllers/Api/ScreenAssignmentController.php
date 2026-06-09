@@ -119,9 +119,10 @@ class ScreenAssignmentController extends Controller
                     ['path' => '/branch-master', 'name' => 'Branch Master'],
                     ['path' => '/user-details', 'name' => 'User Details'],
                     ['path' => '/role-details', 'name' => 'Role Details'],
-                    ['path' => '/role-assignment', 'name' => 'Role Assignment'],
                     ['path' => '/screen-assignment', 'name' => 'Screen Assignment'],
                     ['path' => '/manage-logo', 'name' => 'Manage Logo'],
+                    ['path' => '/manage-upi', 'name' => 'Manage UPI'],
+                    ['path' => '/employee-management', 'name' => 'Employee Management'],
                 ]
             ],
             [
@@ -132,15 +133,31 @@ class ScreenAssignmentController extends Controller
                     ['path' => '/district-master', 'name' => 'District Master'],
                     ['path' => '/taluk-master', 'name' => 'Taluk Master'],
                     ['path' => '/destination', 'name' => 'Destination'],
-                    ['path' => '/from-to-address', 'name' => 'From To Address'],
                     ['path' => '/consignor-master', 'name' => 'Consignor Master'],
                     ['path' => '/consignee-master', 'name' => 'Consignee Master'],
                     ['path' => '/rate-details', 'name' => 'Rate Details'],
-                    ['path' => '/gc-details', 'name' => 'GC Details'],
-                    ['path' => '/driver-details', 'name' => 'Driver Details'],
-                    ['path' => '/vehicle-details', 'name' => 'Vehicle Details'],
                     ['path' => '/bunk-details', 'name' => 'Bunk Details'],
                     ['path' => '/transport-master', 'name' => 'Transport Master'],
+                    ['path' => '/route-master', 'name' => 'Route Master'],
+                ]
+            ],
+            [
+                'category' => 'Vehicle Management',
+                'screens' => [
+                    ['path' => '/vehicle-details', 'name' => 'Vehicle Details'],
+                    ['path' => '/driver-details', 'name' => 'Driver Details'],
+                    ['path' => '/settlement-history', 'name' => 'Settlement History'],
+                    ['path' => '/owner-settlement', 'name' => 'Owner Settlement'],
+                    ['path' => '/maintenance-billing', 'name' => 'Maintenance Billing'],
+                ]
+            ],
+            [
+                'category' => 'Fuel Management',
+                'screens' => [
+                    ['path' => '/fuel-token-entry', 'name' => 'Fuel Token Entry'],
+                    ['path' => '/bunk-bill-entry', 'name' => 'Bunk Bill Entry'],
+                    ['path' => '/bunk-payment-entry', 'name' => 'Bunk Payment Entry'],
+                    ['path' => '/bunk-ledger-report', 'name' => 'Bunk Ledger Report'],
                 ]
             ],
             [
@@ -149,7 +166,7 @@ class ScreenAssignmentController extends Controller
                     ['path' => '/gc-entry', 'name' => 'GC Entry'],
                     ['path' => '/gc-modify', 'name' => 'GC Modify'],
                     ['path' => '/gc-track', 'name' => 'GC Track'],
-                    ['path' => '/receive-gc-ack', 'name' => 'Receive GC Ack'],
+                    ['path' => '/waybill-track', 'name' => 'Waybill Track'],
                     ['path' => '/gc-print', 'name' => 'GC Print'],
                     ['path' => '/gc-report', 'name' => 'GC Report'],
                     ['path' => '/waybill-admin-edit', 'name' => 'WayBill Admin/Edit'],
@@ -159,7 +176,6 @@ class ScreenAssignmentController extends Controller
                 'category' => 'Accounts',
                 'screens' => [
                     ['path' => '/head-details', 'name' => 'Head Details'],
-                    ['path' => '/head-assign-details', 'name' => 'Head Assign Details'],
                     ['path' => '/cash-book-details', 'name' => 'Cash Book Details'],
                     ['path' => '/cash-book-report', 'name' => 'Cash Book Report'],
                 ]
@@ -169,7 +185,6 @@ class ScreenAssignmentController extends Controller
                 'screens' => [
                     ['path' => '/bulk-gc-inward', 'name' => 'Bulk GC Inward'],
                     ['path' => '/receive-inward', 'name' => 'Receive Inward'],
-                    ['path' => '/inward-gc-ack', 'name' => 'Inward GC Ack'],
                     ['path' => '/inward-report', 'name' => 'Inward Report'],
                 ]
             ],
@@ -177,13 +192,88 @@ class ScreenAssignmentController extends Controller
                 'category' => 'Trip Sheet',
                 'screens' => [
                     ['path' => '/trip-sheet-entry', 'name' => 'Trip Sheet Entry'],
+                    ['path' => '/local-trip-entry', 'name' => 'Local Trip Entry'],
+                    ['path' => '/route-trip-entry', 'name' => 'Route Trip Entry'],
                     ['path' => '/trip-sheet-ack', 'name' => 'Trip Sheet Ack'],
                     ['path' => '/trip-sheet-report', 'name' => 'Trip Sheet Report'],
-                    ['path' => '/trip-sheet-verification', 'name' => 'Trip Sheet Verification'],
+                    ['path' => '/local-trip-report', 'name' => 'Local Trip Report'],
                     ['path' => '/trip-sheet-alert', 'name' => 'Trip Sheet Alert'],
                     ['path' => '/trip-sheet-payment', 'name' => 'Trip Sheet Payment'],
                 ]
             ],
+            [
+                'category' => 'Update Delivery',
+                'screens' => [
+                    ['path' => '/update-delivery', 'name' => 'Update Delivery'],
+                    ['path' => '/upload-pod', 'name' => 'Upload POD'],
+                    ['path' => '/delivered-gc-report', 'name' => 'Delivered GC Report'],
+                    ['path' => '/undelivered-gc-report', 'name' => 'Undelivered GC Report'],
+                    ['path' => '/cancelled-gc-report', 'name' => 'Cancelled GC Report'],
+                    ['path' => '/rto-report', 'name' => 'RTO Report'],
+                    ['path' => '/pending-pod-report', 'name' => 'Pending POD Report'],
+                ]
+            ],
+            [
+                'category' => 'Consignor Report',
+                'screens' => [
+                    ['path' => '/consignor-report-prepare', 'name' => 'Consignor Report Prepare'],
+                    ['path' => '/consignor-report-view', 'name' => 'Consignor Report View'],
+                    ['path' => '/consignor-report-reports', 'name' => 'Consignor Report Reports'],
+                ]
+            ],
+            [
+                'category' => 'ACK Report Bundle',
+                'screens' => [
+                    ['path' => '/generate-ack-report-id', 'name' => 'Generate Ack Report ID'],
+                    ['path' => '/ack-report-id-view', 'name' => 'Ack Report ID View'],
+                    ['path' => '/ack-report-bundle', 'name' => 'Ack ID Report'],
+                ]
+            ],
+            [
+                'category' => 'Receive Payment',
+                'screens' => [
+                    ['path' => '/gc-wise-receive', 'name' => 'GC Wise Receive'],
+                    ['path' => '/consignor-wise-receive', 'name' => 'Consignor Wise Receive'],
+                    ['path' => '/consignor-wise-receive-without-id', 'name' => 'Consignor Wise Receive Without ID'],
+                    ['path' => '/payment-pending-report', 'name' => 'Payment Pending Report'],
+                ]
+            ],
+            [
+                'category' => 'Reports',
+                'screens' => [
+                    ['path' => '/waybill-report', 'name' => 'Waybill Report'],
+                    ['path' => '/waybill-track-report', 'name' => 'Waybill Track Report'],
+                    ['path' => '/dispatch-pending-report', 'name' => 'Dispatch Pending Report'],
+                    ['path' => '/audit-log-info', 'name' => 'Audit Log Info'],
+                    ['path' => '/inward-status-report', 'name' => 'Inward Status Report'],
+                    ['path' => '/ack-status-report', 'name' => 'Ack Status Report'],
+                    ['path' => '/headwise-report', 'name' => 'HeadWise Report'],
+                    ['path' => '/balance-sheet', 'name' => 'Balance Sheet'],
+                    ['path' => '/booking-and-dispatch', 'name' => 'Booking And Dispatch'],
+                    ['path' => '/profit-and-loss-report', 'name' => 'Profit And Loss Report'],
+                    ['path' => '/consignor-history-report', 'name' => 'Consignor History Report'],
+                    ['path' => '/user-history-details', 'name' => 'User History Details'],
+                    ['path' => '/waybill-tally-report', 'name' => 'WayBill Tally Report'],
+                    ['path' => '/income-expense-report', 'name' => 'Income/Expense Report'],
+                    ['path' => '/trip-sheet-tally-report', 'name' => 'Trip Sheet Tally Report'],
+                    ['path' => '/trip-sheet-report-reports', 'name' => 'Trip Sheet Report Reports'],
+                    ['path' => '/route-analytics', 'name' => 'Route Analytics'],
+                ]
+            ],
+            [
+                'category' => 'Security Settings',
+                'screens' => [
+                    ['path' => '/app-workflow', 'name' => 'Application Flow'],
+                    ['path' => '/change-password', 'name' => 'Change Password'],
+                    ['path' => '/gc-format-print', 'name' => 'GC Format Print/Download'],
+                ]
+            ],
+            [
+                'category' => 'Support',
+                'screens' => [
+                    ['path' => '/technical-support', 'name' => 'Technical Support'],
+                ]
+            ]
         ];
     }
 }

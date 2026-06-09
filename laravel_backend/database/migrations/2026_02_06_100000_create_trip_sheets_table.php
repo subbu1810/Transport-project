@@ -27,10 +27,33 @@ return new class extends Migration
                 $table->string('cr_number', 50)->nullable();
                 $table->string('indent_number', 50)->nullable();
                 $table->string('trip_remarks', 255)->nullable();
-                $table->enum('status', ['PENDING', 'DISPATCHED', 'DELIVERED', 'CANCELLED'])->default('PENDING');
+                $table->string('status')->default('PENDING'); // Changed from enum to string for flexibility
+                $table->string('trip_type')->nullable(); // Local, Return, etc.
+                
+                // Ack Details
                 $table->date('ack_date')->nullable();
                 $table->string('ack_remarks', 255)->nullable();
+                
+                // Verification Details
+                $table->boolean('is_verified')->default(false);
+                $table->timestamp('verified_at')->nullable();
+                $table->string('verified_by')->nullable();
+                
+                // Other details
+                $table->string('alert_branch')->nullable();
                 $table->foreignId('created_by')->nullable()->constrained('admins');
+                
+                // KM Tracking
+                $table->decimal('opening_km', 12, 2)->nullable();
+                $table->decimal('closing_km', 12, 2)->nullable();
+                $table->decimal('total_kms', 12, 2)->nullable();
+                $table->decimal('rate_per_km', 12, 2)->nullable();
+                
+                // Financial & Settlement
+                $table->boolean('is_settled')->default(false);
+                $table->decimal('balance_at_office', 12, 2)->default(0);
+                $table->decimal('driver_pending_amount', 12, 2)->default(0);
+
                 $table->timestamps();
 
                 $table->index('trip_number');

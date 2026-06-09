@@ -4,17 +4,28 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Vehicle extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+
+    protected static function booted()
+    {
+        static::deleting(function ($vehicle) {
+            $tripCount = \DB::table('trip_sheets')->where('vehicle_id', $vehicle->id)->count();
+            if ($tripCount > 0) {
+                throw new \Exception("Cannot delete: This vehicle is associated with {$tripCount} trip sheets.");
+            }
+        });
+    }
 
     protected $table = 'vehicles';
 
     protected $fillable = [
         'vehicle_number',
+        'owner_id',
         'owner_name',
+        'rate_per_km',
         'phone',
         'insurance_upto',
         'vehicle_status',
@@ -29,9 +40,9 @@ class Vehicle extends Model
         'rc_valid_from' => 'date',
         'rc_valid_to' => 'date',
         'is_active' => 'boolean',
+        'rate_per_km' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
     public static function createRules(): array
@@ -39,6 +50,7 @@ class Vehicle extends Model
         return [
             'vehicle_number' => 'required|string|max:20|unique:vehicles,vehicle_number',
             'owner_name' => 'required|string|max:100',
+            'rate_per_km' => 'nullable|numeric|min:0',
             'phone' => 'nullable|string|max:20',
             'insurance_upto' => 'nullable|date',
             'vehicle_status' => 'required|string|max:20',
@@ -54,6 +66,7 @@ class Vehicle extends Model
         return [
             'vehicle_number' => "nullable|string|max:20|unique:vehicles,vehicle_number,{$id}",
             'owner_name' => 'nullable|string|max:100',
+            'rate_per_km' => 'nullable|numeric|min:0',
             'phone' => 'nullable|string|max:20',
             'insurance_upto' => 'nullable|date',
             'vehicle_status' => 'nullable|string|max:20',
@@ -100,5 +113,10 @@ class Vehicle extends Model
             'OUT_OF_SERVICE' => 'Out of Service',
             default => $this->vehicle_status,
         };
+    }
+
+    public function lastTrip()
+    {
+        return $this->hasOne(TripSheet::class, 'vehicle_id')->latestOfMany();
     }
 }

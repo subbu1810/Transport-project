@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Save, RotateCcw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
-
-const API_URL = 'http://localhost:8000/api/v1'
+import axios from 'axios'
+import { Search, Save, RotateCcw, CheckCircle, AlertCircle, Loader2, X, HelpCircle, Trash2 } from 'lucide-react'
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
 
 function WayBillAdminEdit() {
   const [gcNumber, setGcNumber] = useState('')
@@ -10,6 +10,29 @@ function WayBillAdminEdit() {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [notification, setNotification] = useState({ show: false, type: '', message: '' })
+  const [user, setUser] = useState(null)
+  const [originalData, setOriginalData] = useState(null)
+  const [showReasonModal, setShowReasonModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [editReason, setEditReason] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
+  const [showHelp, setShowHelp] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+
+  const showNotify = (type, message) => {
+    setNotification({ show: true, type, message })
+    if (type === 'success') {
+      setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 3000)
+    }
+  }
+
+  const [displayData, setDisplayData] = useState({
+    from: '',
+    to: '',
+    consignor: '',
+    consignee: ''
+  })
 
   const [formData, setFormData] = useState({
     billDate: '',
@@ -32,7 +55,6 @@ function WayBillAdminEdit() {
     gstPercent: '',
     gstAmount: '',
     grandTotal: '',
-    roadingClerk: '',
     remarks: ''
   })
 
@@ -44,53 +66,90 @@ function WayBillAdminEdit() {
 
   useEffect(() => {
     fetchMasterData()
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr))
+      } catch (e) {
+        console.error('Error parsing user data')
+      }
+    }
   }, [])
 
   const fetchMasterData = async () => {
     try {
+      setError('')
       const [
         branchesRes,
         consignorsRes,
         consigneesRes,
         destinationsRes
       ] = await Promise.all([
-        fetch(`${API_URL}/branches`).then(res => res.json()),
-        fetch(`${API_URL}/consignors`).then(res => res.json()),
-        fetch(`${API_URL}/consignees`).then(res => res.json()),
-        fetch(`${API_URL}/destinations`).then(res => res.json())
+        fetch(`${API_BASE_URL}/branches`).then(res => { if (!res.ok) throw new Error('Branches failed'); return res.json() }),
+        fetch(`${API_BASE_URL}/consignors`).then(res => { if (!res.ok) throw new Error('Consignors failed'); return res.json() }),
+        fetch(`${API_BASE_URL}/consignees`).then(res => { if (!res.ok) throw new Error('Consignees failed'); return res.json() }),
+        fetch(`${API_BASE_URL}/destinations`).then(res => { if (!res.ok) throw new Error('Destinations failed'); return res.json() })
       ])
 
+      let masterDataLoaded = true
       if (branchesRes.success) setBranches(branchesRes.data)
+      else masterDataLoaded = false
+
       if (consignorsRes.success) setConsignors(consignorsRes.data)
+      else masterDataLoaded = false
+
       if (consigneesRes.success) setConsignees(consigneesRes.data)
+      else masterDataLoaded = false
+
       if (destinationsRes.success) setDestinations(destinationsRes.data)
+      else masterDataLoaded = false
+
+      if (!masterDataLoaded) {
+        setError('Master data partially loaded. Some dropdowns might be empty.')
+      }
 
     } catch (err) {
       console.error('Error fetching master data:', err)
-      setError('Failed to load master data. Some fields may not be populated.')
+      setError(`Failed to load master data: ${err.message}. Please refresh.`)
     }
   }
 
   const handleSearch = async () => {
     if (!gcNumber.trim()) {
-      setError('Please enter a GC Number')
+      showNotify('error', 'Please enter a GC Number')
       return
     }
 
     setSearching(true)
     setError('')
     setSuccess('')
+    setNotification({ show: false, type: '', message: '' })
     setWaybillId(null)
 
     try {
-      const response = await fetch(`${API_URL}/waybills/search/${gcNumber}`)
-      const data = await response.json()
-
-      if (data.success && data.data) {
-        const waybill = data.data
+      const response = await axios.get(`${API_BASE_URL}/waybills/search/${gcNumber}`)
+      
+      if (response.data.success && response.data.data) {
+        const waybill = response.data.data
         setWaybillId(waybill.id)
+
+        // Safe date parsing to YYYY-MM-DD
+        let formattedDate = ''
+        if (waybill.bill_date) {
+          const d = new Date(waybill.bill_date)
+          if (!isNaN(d.getTime())) {
+            formattedDate = d.toISOString().split('T')[0]
+          } else {
+            const parts = waybill.bill_date.split('-')
+            if (parts.length === 3) {
+              if (parts[0].length === 4) formattedDate = waybill.bill_date 
+              else formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`
+            }
+          }
+        }
+
         setFormData({
-          billDate: waybill.bill_date || '',
+          billDate: formattedDate || waybill.bill_date || '',
           originBranchId: waybill.origin_branch_id || '',
           destinationId: waybill.destination_id || '',
           consignorId: waybill.consignor_id || '',
@@ -109,18 +168,32 @@ function WayBillAdminEdit() {
           accountType: waybill.account_type || '',
           gstPercent: waybill.gst_percent || '',
           gstAmount: waybill.gst_amount || '',
-          grandTotal: waybill.grand_total || '',
-          roadingClerk: waybill.roading_clerk || '',
-          remarks: waybill.remarks || ''
+          remarks: waybill.remarks || '',
+          status: waybill.status
+        })
+        setDisplayData({
+          from: waybill.origin_branch?.branch_name || 'N/A',
+          to: waybill.destination?.city_name || 'N/A',
+          consignor: waybill.consignor?.name || 'N/A',
+          consignee: waybill.consignee?.name || 'N/A'
         })
         setArticles(waybill.articles || [])
-        setSuccess('Waybill details fetched successfully.')
+        setOriginalData(JSON.parse(JSON.stringify(waybill))) 
+
+        // Branch-based Access Control for Admin role
+        if (user?.role !== 'superadmin' && parseInt(user?.branch_id) !== parseInt(waybill.origin_branch_id)) {
+          setError(`ACCESS DENIED: This GC belongs to ${waybill.origin_branch?.branch_name || 'another branch'}. Only users from the Booked (Origin) branch can modify it.`);
+          setWaybillId(null); // Clear ID to prevent editing
+          return;
+        }
+
+        setSuccess('GC: ' + gcNumber + ' Loaded. Enter Modify details below.')
       } else {
-        setError(data.message || 'GC Number not found.')
+        setError(response.data.message || 'GC Number not found.')
       }
     } catch (err) {
       console.error('Error searching waybill:', err)
-      setError('An error occurred while searching. Please try again.')
+      setError(`Search failed: ${err.message}`)
     } finally {
       setSearching(false)
     }
@@ -128,13 +201,48 @@ function WayBillAdminEdit() {
 
   const handleSave = async () => {
     if (!waybillId) {
-      setError('No waybill loaded to save.')
+      showNotify('error', 'No waybill loaded to save.')
+      return
+    }
+
+    // E-Way Bill Validation: Mandatory for declared value > 49,999
+    const dVal = parseFloat(formData.declaredValue) || 0;
+    if (dVal > 49999 && (!formData.ewayBillNo || formData.ewayBillNo.trim() === '')) {
+      showNotify('error', 'Declared Value exceeds ₹49,999. E-Way Bill No. is mandatory.');
+      return;
+    }
+
+    // Check for changes to prompt for reason
+    const hasChanges = JSON.stringify(formData) !== JSON.stringify({
+      billDate: originalData.bill_date ? new Date(originalData.bill_date).toISOString().split('T')[0] : '',
+      originBranchId: originalData.origin_branch_id || '',
+      destinationId: originalData.destination_id || '',
+      consignorId: originalData.consignor_id || '',
+      consigneeId: originalData.consignee_id || '',
+      articleDesc: originalData.article_desc || '',
+      totalArticles: originalData.total_articles || '',
+      freightAmount: originalData.freight_amount || '',
+      ddCharges: originalData.dd_charges || '',
+      handlingCharges: originalData.handling_charges || '',
+      stationaryCharges: originalData.stationary_charges || '',
+      totalAmount: originalData.total_amount || '',
+      invoiceNo: originalData.invoice_no || '',
+      declaredValue: originalData.declared_value || '',
+      ewayBillNo: originalData.eway_bill_no || '',
+      taxPayableBy: originalData.tax_payable_by || '',
+      accountType: originalData.account_type || '',
+      gstPercent: originalData.gst_percent || '',
+      gstAmount: originalData.gst_amount || '',
+      remarks: originalData.remarks || ''
+    })
+
+    if (hasChanges && !editReason) {
+      setShowReasonModal(true)
       return
     }
 
     setLoading(true)
-    setError('')
-    setSuccess('')
+    setNotification({ show: false, type: '', message: '' })
 
     try {
       const payload = {
@@ -144,53 +252,94 @@ function WayBillAdminEdit() {
         consignor_id: formData.consignorId,
         consignee_id: formData.consigneeId,
         article_desc: formData.articleDesc,
-        total_articles: formData.totalArticles,
-        freight_amount: formData.freightAmount,
-        dd_charges: formData.ddCharges,
-        handling_charges: formData.handlingCharges,
-        stationary_charges: formData.stationaryCharges,
-        total_amount: formData.totalAmount,
+        total_articles: parseInt(formData.totalArticles) || 0,
+        freight_amount: parseFloat(formData.freightAmount) || 0,
+        dd_charges: parseFloat(formData.ddCharges) || 0,
+        handling_charges: parseFloat(formData.handlingCharges) || 0,
+        stationary_charges: parseFloat(formData.stationaryCharges) || 0,
+        total_amount: parseFloat(formData.totalAmount) || 0,
         invoice_no: formData.invoiceNo,
-        declared_value: formData.declaredValue,
+        declared_value: parseFloat(formData.declaredValue) || 0,
         eway_bill_no: formData.ewayBillNo,
         tax_payable_by: formData.taxPayableBy,
         account_type: formData.accountType,
-        gst_percent: formData.gstPercent,
-        gst_amount: formData.gstAmount,
-        grand_total: formData.grandTotal,
-        roading_clerk: formData.roadingClerk,
+        gst_percent: parseFloat(formData.gstPercent) || 0,
+        gst_amount: parseFloat(formData.gstAmount) || 0,
         remarks: formData.remarks,
-        articles: articles // Send existing articles back (assuming backend handles update/replace)
+        articles: articles.map(art => ({
+          ...art,
+          no_of_articles: parseInt(art.no_of_articles) || 0,
+          rate: parseFloat(art.rate) || 0,
+          actual_weight: parseFloat(art.actual_weight) || 0,
+          charged_weight: parseFloat(art.charged_weight) || 0
+        })),
+        edit_reason: editReason || "Admin General Update",
+        admin_id: user?.id
       }
 
-      const response = await fetch(`${API_URL}/waybills/${waybillId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
+      const response = await axios.put(`${API_BASE_URL}/waybills/${waybillId}`, payload)
 
-      const data = await response.json()
-
-      if (data.success) {
-        setSuccess('Waybill updated successfully!')
+      if (response.data.success) {
+        showNotify('success', 'Waybill updated successfully!')
+        setShowReasonModal(false)
+        setEditReason('')
+        setOriginalData(null)
+        handleReset()
       } else {
-        setError(data.message || 'Failed to update waybill.')
+        showNotify('error', response.data.message || 'Failed to update waybill.')
       }
     } catch (err) {
       console.error('Error updating waybill:', err)
-      setError('An error occurred while saving. Please try again.')
+      showNotify('error', 'An error occurred while saving. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCancelGC = async () => {
+    if (!waybillId) return
+    
+    if (formData.status === 'Delivered' || formData.status === 'CANCELLED') {
+      showNotify('error', `Cannot cancel a waybill that is already ${formData.status}.`)
+      return
+    }
+
+    if (!cancelReason) {
+      setShowCancelModal(true)
+      return
+    }
+
+    setIsCancelling(true)
+    try {
+      const response = await axios.post(`${API_BASE_URL}/waybills/${waybillId}/cancel`, {
+        cancel_reason: cancelReason,
+        branch_id: user?.branch_id,
+        role: user?.role
+      })
+
+      if (response.data.success) {
+        showNotify('success', 'Waybill cancelled successfully! Financial entries reversed.')
+        setShowCancelModal(false)
+        setCancelReason('')
+        handleReset()
+      } else {
+        showNotify('error', response.data.message || 'Cancellation failed.')
+      }
+    } catch (err) {
+      console.error('Cancellation error:', err)
+      showNotify('error', err.response?.data?.message || 'Error occurred during cancellation.')
+    } finally {
+      setIsCancelling(false)
     }
   }
 
   const handleReset = () => {
     setGcNumber('')
     setWaybillId(null)
-    setSuccess('')
     setError('')
+    setSuccess('')
+    setNotification({ show: false, type: '', message: '' })
+    setDisplayData({ from: '', to: '', consignor: '', consignee: '' })
     setFormData({
       billDate: '',
       originBranchId: '',
@@ -206,13 +355,11 @@ function WayBillAdminEdit() {
       totalAmount: '',
       invoiceNo: '',
       declaredValue: '',
-      ewayBillNo: '',
       taxPayableBy: '',
       accountType: '',
       gstPercent: '',
       gstAmount: '',
       grandTotal: '',
-      roadingClerk: '',
       remarks: ''
     })
     setArticles([])
@@ -227,7 +374,28 @@ function WayBillAdminEdit() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold text-gray-800">WayBill Admin/Edit</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold text-gray-800">WayBill Admin/Edit</h1>
+        <button
+          onClick={() => setShowHelp(true)}
+          className="p-1.5 bg-white text-blue-600 rounded-full shadow-sm hover:shadow-md hover:bg-blue-50 transition-all border border-blue-100 group"
+          title="Admin Guide"
+        >
+          <HelpCircle size={20} className="group-hover:scale-110 transition-transform" />
+        </button>
+      </div>
+
+      {/* Obsolete Warning Banner */}
+      <div className="p-4 bg-amber-50 border-2 border-amber-300 text-amber-800 rounded-lg flex items-start gap-3 shadow-sm">
+        <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+        <div>
+          <h4 className="font-extrabold text-sm uppercase tracking-wide">⚠️ Page Obsolete / Deprecated</h4>
+          <p className="text-xs mt-1 font-semibold leading-relaxed">
+            This page is obsolete. Please use the <span className="font-black underline text-amber-900">GC Modify</span> page instead to edit Consignments. 
+            To edit consignments belonging to other branches, please log in as a <span className="font-black text-amber-900">Super Admin</span>.
+          </p>
+        </div>
+      </div>
 
       <div className="bg-white rounded-lg shadow-md p-4 space-y-4">
 
@@ -256,17 +424,53 @@ function WayBillAdminEdit() {
           </div>
         </div>
 
-        {/* Feedback Messages */}
+        {/* Messages */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 font-medium">
-            <AlertCircle size={20} />
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 font-bold text-sm animate-in fade-in slide-in-from-top-2 duration-300">
             {error}
           </div>
         )}
         {success && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 font-medium">
-            <CheckCircle size={20} />
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 font-bold text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            <CheckCircle size={18} />
             {success}
+          </div>
+        )}
+
+        {/* Popup Modal Notification */}
+        {notification.show && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className={`bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border ${notification.type === 'success' ? 'border-green-100' : 'border-red-100'}`}>
+              <div className={`p-8 text-center space-y-4 ${notification.type === 'success' ? 'bg-gradient-to-b from-green-50/50 to-white' : 'bg-gradient-to-b from-red-50/50 to-white'}`}>
+                <div className="flex justify-center relative">
+                  <div className={`p-4 rounded-full shadow-inner ${notification.type === 'success' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                    {notification.type === 'success' ? <CheckCircle size={40} /> : <AlertCircle size={40} />}
+                  </div>
+                  <button
+                    onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                    className="absolute -top-4 -right-4 p-1 rounded-full bg-white shadow-md text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <h2 className={`text-2xl font-black uppercase tracking-tight ${notification.type === 'success' ? 'text-green-900' : 'text-red-900'}`}>
+                    {notification.type === 'success' ? 'SUCCESS!' : 'ERROR!'}
+                  </h2>
+                  <p className="text-gray-600 text-sm font-black leading-relaxed px-4">
+                    {notification.message}
+                  </p>
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 flex">
+                <button
+                  onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                  className={`flex-1 px-4 py-3 rounded-2xl text-white text-xs font-black shadow-lg transition-all hover:scale-105 active:scale-95 uppercase tracking-widest ${notification.type === 'success' ? 'bg-green-600 shadow-green-100 hover:bg-green-700' : 'bg-red-600 shadow-red-100 hover:bg-red-700'}`}
+                >
+                  OKAY
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -287,58 +491,30 @@ function WayBillAdminEdit() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">From</label>
-                  <select
-                    value={formData.originBranchId}
-                    onChange={(e) => setFormData({ ...formData, originBranchId: e.target.value })}
-                    className="w-full px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-yellow-500 focus:outline-none text-sm"
-                  >
-                    <option value="">Select Origin</option>
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.branch_name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full px-3 py-1.5 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm font-bold uppercase">
+                    {displayData.from}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">To</label>
-                  <select
-                    value={formData.destinationId}
-                    onChange={(e) => setFormData({ ...formData, destinationId: e.target.value })}
-                    className="w-full px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-yellow-500 focus:outline-none text-sm"
-                  >
-                    <option value="">Select Destination</option>
-                    {destinations.map(d => (
-                      <option key={d.id} value={d.id}>{d.city_name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full px-3 py-1.5 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm font-bold uppercase">
+                    {displayData.to}
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Consignor</label>
-                  <select
-                    value={formData.consignorId}
-                    onChange={(e) => setFormData({ ...formData, consignorId: e.target.value })}
-                    className="w-full px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-yellow-500 focus:outline-none text-sm"
-                  >
-                    <option value="">Select Consignor</option>
-                    {consignors.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full px-3 py-1.5 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm font-bold uppercase">
+                    {displayData.consignor}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Consignee</label>
-                  <select
-                    value={formData.consigneeId}
-                    onChange={(e) => setFormData({ ...formData, consigneeId: e.target.value })}
-                    className="w-full px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-yellow-500 focus:outline-none text-sm"
-                  >
-                    <option value="">Select Consignee</option>
-                    {consignees.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full px-3 py-1.5 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-sm font-bold uppercase">
+                    {displayData.consignee}
+                  </div>
                 </div>
               </div>
 
@@ -447,23 +623,209 @@ function WayBillAdminEdit() {
             <div className="flex gap-2 justify-center pt-3">
               <button
                 onClick={handleSave}
-                disabled={loading}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-bold text-sm flex items-center gap-2 shadow-lg"
+                disabled={loading || formData.status === 'CANCELLED'}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-bold text-sm flex items-center gap-2 shadow-lg disabled:opacity-50"
               >
                 {loading && <Loader2 className="animate-spin" size={20} />}
                 {loading ? 'Saving...' : 'Save & Update'}
               </button>
+              
+              <button
+                onClick={() => setShowCancelModal(true)}
+                disabled={formData.status === 'Delivered' || formData.status === 'CANCELLED'}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-bold text-sm flex items-center gap-2 shadow-lg disabled:opacity-50"
+              >
+                <Trash2 size={18} />
+                Cancel GC
+              </button>
+
               <button
                 onClick={handleReset}
-                className="px-5 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-bold text-sm flex items-center gap-2"
+                className="px-5 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-bold text-sm flex items-center gap-2 shadow-lg"
               >
                 <RotateCcw size={18} />
                 Reset
               </button>
             </div>
+
+            {showReasonModal && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm shadow-2xl">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 animate-in zoom-in duration-200 border border-amber-100">
+                  <div className="flex items-center gap-3 mb-4 text-amber-600">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Save size={24} />
+                    </div>
+                    <h2 className="text-lg font-black uppercase tracking-tight">Admin Authorization</h2>
+                  </div>
+
+                  <p className="text-slate-500 text-[10px] font-black leading-relaxed mb-6 uppercase tracking-wider">
+                    "You are modifying critical Waybill data. Please enter a valid reason for this audit log."
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modification Reason *</label>
+                      <textarea
+                        value={editReason}
+                        onChange={(e) => setEditReason(e.target.value)}
+                        placeholder="Explain why these changes are being made..."
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:border-amber-500 outline-none font-bold text-slate-700 text-sm h-24 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowReasonModal(false)}
+                        className="flex-1 py-3 border-2 border-slate-100 rounded-xl text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={!editReason.trim()}
+                        className="flex-1 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-amber-100 transition-all disabled:opacity-50"
+                      >
+                        Confirm Edit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showCancelModal && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm shadow-2xl">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden p-6 animate-in zoom-in duration-200 border border-red-100">
+                  <div className="flex items-center gap-3 mb-4 text-red-600">
+                    <div className="p-2 bg-red-50 rounded-lg">
+                      <Trash2 size={24} />
+                    </div>
+                    <h2 className="text-lg font-black uppercase tracking-tight">Void Waybill (Cancel)</h2>
+                  </div>
+
+                  <div className="p-4 bg-red-50 rounded-xl mb-6">
+                    <p className="text-red-800 text-xs font-bold leading-relaxed">
+                      WARNING: Cancelling this GC will void all charges and create a reversal entry in the cash book. This action cannot be undone.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cancellation Reason *</label>
+                      <textarea
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="Explain why this GC is being cancelled..."
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:border-red-500 outline-none font-bold text-slate-700 text-sm h-24 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowCancelModal(false)}
+                        className="flex-1 py-3 border-2 border-slate-100 rounded-xl text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all"
+                      >
+                        Abort
+                      </button>
+                      <button
+                        onClick={handleCancelGC}
+                        disabled={!cancelReason.trim() || isCancelling}
+                        className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-100 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isCancelling && <Loader2 className="animate-spin" size={14} />}
+                        Confirm Cancellation
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-blue-100">
+            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <HelpCircle size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Admin Edit Guide</h2>
+                  <p className="text-blue-100 text-xs">Managing critical waybill modifications</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-blue-700 font-bold uppercase text-xs tracking-wider">
+                    <span className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">1</span>
+                    Search GC
+                  </div>
+                  <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                    <li>• Enter the <span className="font-semibold text-gray-800">GC Number</span> in the green search bar.</li>
+                    <li>• Use the <span className="font-semibold text-gray-800 uppercase text-[10px]">Search</span> button to load historical data.</li>
+                  </ul>
+                </section>
+
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-indigo-700 font-bold uppercase text-xs tracking-wider">
+                    <span className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">2</span>
+                    Modify Details
+                  </div>
+                  <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                    <li>• Update <span className="font-semibold text-gray-800">Date, Article Counts</span>, or <span className="font-semibold text-gray-800">Weights</span>.</li>
+                    <li>• Recalculate <span className="font-semibold text-gray-800">Freight</span> and <span className="font-semibold text-gray-800">Grand Total</span> carefully.</li>
+                  </ul>
+                </section>
+
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-amber-700 font-bold uppercase text-xs tracking-wider">
+                    <span className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">3</span>
+                    Audit Trail
+                  </div>
+                  <ul className="space-y-3 text-sm text-gray-600 ml-10">
+                    <li>• A <span className="font-semibold text-gray-800">Reason for Modification</span> is mandatory for all admin edits.</li>
+                    <li>• These changes are logged under your <span className="font-semibold text-gray-800 uppercase text-[10px]">Admin ID</span>.</li>
+                  </ul>
+                </section>
+
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-red-700 font-bold uppercase text-xs tracking-wider">
+                    <span className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">!</span>
+                    High Value Goods
+                  </div>
+                  <div className="ml-10">
+                    <p className="text-xs text-gray-500 leading-relaxed italic">
+                      For items over <span className="font-bold">₹49,999</span>, the E-Way Bill Number is <span className="text-red-500 font-bold underline">Mandatory</span> and will be validated on save.
+                    </p>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setShowHelp(false)}
+                className="px-6 py-2 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-900 transition-all shadow-lg"
+              >
+                Understand & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

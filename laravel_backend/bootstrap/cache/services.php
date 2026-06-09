@@ -27,6 +27,8 @@
     23 => 'Laravel\\Tinker\\TinkerServiceProvider',
     24 => 'Carbon\\Laravel\\ServiceProvider',
     25 => 'Termwind\\Laravel\\TermwindServiceProvider',
+    26 => 'Spatie\\Backup\\BackupServiceProvider',
+    27 => 'Spatie\\SignalAwareCommand\\SignalAwareCommandServiceProvider',
   ),
   'eager' => 
   array (
@@ -43,6 +45,8 @@
     10 => 'Laravel\\Sanctum\\SanctumServiceProvider',
     11 => 'Carbon\\Laravel\\ServiceProvider',
     12 => 'Termwind\\Laravel\\TermwindServiceProvider',
+    13 => 'Spatie\\Backup\\BackupServiceProvider',
+    14 => 'Spatie\\SignalAwareCommand\\SignalAwareCommandServiceProvider',
   ),
   'deferred' => 
   array (

@@ -8,6 +8,7 @@ import BranchManagement from '../pages/AdminManagement'
 import RoleDetails from '../pages/RoleDetails'
 import ScreenAssignment from '../pages/ScreenAssignment'
 import SystemSettings from '../pages/SystemSettings'
+import ManageUPI from '../pages/ManageUPI'
 import LookupMaster from '../pages/LookupMaster'
 import StateMaster from '../pages/StateMaster'
 import DistrictMaster from '../pages/DistrictMaster'
@@ -16,7 +17,6 @@ import Destination from '../pages/Destination'
 import ConsignorMaster from '../pages/ConsignorMaster'
 import ConsigneeMaster from '../pages/ConsigneeMaster'
 import RateDetails from '../pages/RateDetails'
-import GCDetails from '../pages/GCDetails'
 import DriverDetails from '../pages/DriverDetails'
 import VehicleDetails from '../pages/VehicleDetails'
 import BunkDetails from '../pages/BunkDetails'
@@ -32,23 +32,30 @@ import HeadDetails from '../pages/HeadDetails'
 import CashBookDetails from '../pages/CashBookDetails'
 import CashBookReport from '../pages/CashBookReport'
 import ReceiveInward from '../pages/ReceiveInward'
-import InwardGCAck from '../pages/InwardGCAck'
+import OwnerSettlement from '../pages/OwnerSettlement'
+import SettlementHistory from '../pages/SettlementHistory'
+import FuelTokenEntry from '../pages/FuelTokenEntry'
+import BunkBillEntry from '../pages/BunkBillEntry'
+import BunkLedgerReport from '../pages/BunkLedgerReport'
+import BunkPaymentEntry from '../pages/BunkPaymentEntry'
+
 import InwardReport from '../pages/InwardReport'
 import BulkGCInward from '../pages/BulkGCInward'
-import LocalTrip from '../pages/LocalTrip'
 import TripSheetEntry from '../pages/TripSheetEntry'
+import LocalTrip from '../pages/LocalTrip'
 import TripSheetAck from '../pages/TripSheetAck'
 import TripSheetReport from '../pages/TripSheetReport'
-import TripSheetVerification from '../pages/TripSheetVerification'
+import LocalTripReport from '../pages/LocalTripReport'
 import TripSheetAlert from '../pages/TripSheetAlert'
 import TripSheetPayment from '../pages/TripSheetPayment'
 import ConsignorReportPrepare from '../pages/ConsignorReportPrepare'
-import UnloadReportPrepare from '../pages/UnloadReportPrepare'
-import UnloadReportView from '../pages/UnloadReportView'
+import ConsignorReportView from '../pages/ConsignorReportView'
+
 import GenerateAckReportId from '../pages/GenerateAckReportId'
 import AckReportIdView from '../pages/AckReportIdView'
 import GCWiseReceive from '../pages/GCWiseReceive'
 import ConsignorWiseReceive from '../pages/ConsignorWiseReceive'
+import ConsignorWiseReceiveWithoutId from '../pages/ConsignorWiseReceiveWithoutId'
 import PaymentPendingReport from '../pages/PaymentPendingReport'
 import WaybillTrack from '../pages/WaybillTrack'
 import WaybillReportPage from '../pages/WaybillReportPage'
@@ -75,14 +82,23 @@ import InwardWayBill from '../pages/InwardWayBill'
 import TripSheet from '../pages/TripSheet'
 import EWayBill from '../pages/EWayBill'
 import ConsignorReport from '../pages/ConsignorReport'
-import UnloadReport from '../pages/UnloadReport'
+
 import ACKReportBundle from '../pages/ACKReportBundle'
 import ReceivePayment from '../pages/ReceivePayment'
 import Reports from '../pages/Reports'
 import UpdateDelivery from '../pages/UpdateDelivery'
 import DeliveryStatusReport from '../pages/DeliveryStatusReport'
-
-
+import EmployeeManagement from '../pages/EmployeeManagement'
+import AppWorkflow from '../pages/AppWorkflow'
+import GCFormatPrint from '../pages/GCFormatPrint'
+import RouteMaster from '../pages/RouteMaster'
+import RouteTripSheetEntry from '../pages/RouteTripSheetEntry'
+import RouteAnalytics from '../pages/RouteAnalytics'
+import TechnicalSupport from '../pages/TechnicalSupport'
+import MaintenanceBilling from '../pages/MaintenanceBilling'
+import BackupOptions from '../pages/BackupOptions'
+import UploadPod from '../pages/UploadPod'
+import PendingPodReport from '../pages/PendingPodReport'
 
 function TabbedInterface() {
   const { tabs, activeTab, closeTab, switchTab, showLimitModal, setShowLimitModal } = useTabs()
@@ -111,104 +127,115 @@ function TabbedInterface() {
     setModal({ ...modal, isOpen: false, tabId: null })
   }
 
-  const renderActiveTabContent = () => {
-    const activeTabData = tabs.find(tab => tab.id === activeTab)
-    if (!activeTabData) return null
+  const componentMap = {
+    'dashboard': <Dashboard />,
+    'branch-master': <BranchMaster />,
+    'user-details': <UserDetails />,
+    'admin-management': <BranchManagement />,
+    'role-details': <RoleDetails />,
+    'screen-assignment': <ScreenAssignment />,
+    'manage-logo': <SystemSettings />,
+    'manage-upi': <ManageUPI />,
+    'lookup-master': <LookupMaster />,
+    'state-master': <StateMaster />,
+    'district-master': <DistrictMaster />,
+    'taluk-master': <TalukMaster />,
+    'destination': <Destination />,
+    'consignor-master': <ConsignorMaster />,
+    'consignee-master': <ConsigneeMaster />,
+    'rate-details': <RateDetails />,
+    'driver-details': <DriverDetails />,
+    'vehicle-details': <VehicleDetails />,
+    'bunk-details': <BunkDetails />,
+    'transport-master': <TransportMaster />,
+    'gc-entry': <GCEntry />,
+    'gc-track': <GCTracking />,
+    'gc-modify': <GCModify />,
+    'receive-gc-ack': <ReceiveGCAck />,
+    'gc-print': <GCPrint />,
+    'gc-report': <GCReport />,
+    'waybill-admin-edit': <WayBillAdminEdit />,
+    'head-details': <HeadDetails />,
+    'cash-book-details': <CashBookDetails />,
+    'cash-book-report': <CashBookReport />,
+    'cashbook-report': <CashBookReport />,
+    'receive-inward': <ReceiveInward />,
+    'owner-settlement': <OwnerSettlement />,
+    'settlement-history': <SettlementHistory />,
+    'fuel-token-entry': <FuelTokenEntry />,
+    'bunk-bill-entry': <BunkBillEntry />,
+    'bunk-payment-entry': <BunkPaymentEntry />,
+    'bunk-ledger-report': <BunkLedgerReport />,
 
-    const componentMap = {
-      'dashboard': <Dashboard />,
-      'branch-master': <BranchMaster />,
-      'user-details': <UserDetails />,
-      'admin-management': <BranchManagement />,
-      'role-details': <RoleDetails />,
-      'screen-assignment': <ScreenAssignment />,
-      'manage-logo': <SystemSettings />,
-      'lookup-master': <LookupMaster />,
-      'state-master': <StateMaster />,
-      'district-master': <DistrictMaster />,
-      'taluk-master': <TalukMaster />,
-      'destination': <Destination />,
-      'consignor-master': <ConsignorMaster />,
-      'consignee-master': <ConsigneeMaster />,
-      'rate-details': <RateDetails />,
-      'gc-details': <GCDetails />,
-      'driver-details': <DriverDetails />,
-      'vehicle-details': <VehicleDetails />,
-      'bunk-details': <BunkDetails />,
-      'transport-master': <TransportMaster />,
-      'gc-entry': <GCEntry />,
-      'gc-track': <GCTracking />,
-      'gc-modify': <GCModify />,
-      'receive-gc-ack': <ReceiveGCAck />,
-      'gc-print': <GCPrint />,
-      'gc-report': <GCReport />,
-      'waybill-admin-edit': <WayBillAdminEdit />,
-      'head-details': <HeadDetails />,
-      'cash-book-details': <CashBookDetails />,
-      'cash-book-report': <CashBookReport />,
-      'cashbook-report': <CashBookReport />,
-      'receive-inward': <ReceiveInward />,
-      'inward-gc-ack': <InwardGCAck />,
-      'inward-report': <InwardReport />,
-      'bulk-gc-inward': <BulkGCInward />,
-      'local-trip': <LocalTrip />,
-      'trip-sheet-entry': <TripSheetEntry />,
-      'trip-sheet-ack': <TripSheetAck />,
-      'trip-sheet-report': <TripSheetReport />,
-      'trip-sheet-verification': <TripSheetVerification />,
-      'trip-sheet-alert': <TripSheetAlert />,
-      'trip-sheet-payment': <TripSheetPayment />,
-      'consignor-report-prepare': <ConsignorReportPrepare />,
-      'unload-report-prepare': <UnloadReportPrepare />,
-      'unload-report-view': <UnloadReportView />,
-      'generate-ack-report-id': <GenerateAckReportId />,
-      'ack-report-id-view': <AckReportIdView />,
-      'gc-wise-receive': <GCWiseReceive />,
-      'consignor-wise-receive': <ConsignorWiseReceive />,
-      'payment-pending-report': <PaymentPendingReport />,
-      'waybill-track': <WaybillTrack />,
-      'waybill-report': <WaybillReportPage />,
-      'consignor-report-reports': <ConsignorReportReports />,
-      'dispatch-pending-report': <DispatchPendingReport />,
-      'trip-sheet-report-reports': <TripSheetReportReports />,
-      'audit-log-info': <AuditLogInfo />,
-      'inward-status-report': <InwardStatusReport />,
-      'ack-status-report': <AckStatusReport />,
-      'change-password': <ChangePassword />,
-      'headwise-report': <HeadwiseReport />,
-      'balance-sheet': <BalanceSheet />,
-      'booking-and-dispatch': <BookingAndDispatch />,
-      'profit-and-loss-report': <ProfitAndLossReport />,
-      'consignor-history-report': <ConsignorHistoryReport />,
-      'user-history-details': <UserHistoryDetails />,
-      'waybill-tally-report': <WaybillTallyReport />,
-      'income-expense-report': <IncomeExpenseReport />,
-      'trip-sheet-tally-report': <TripSheetTallyReport />,
-      'masters': <Masters />,
-      'waybill': <WayBill />,
-      'accounts': <Accounts />,
-      'inward-waybill': <InwardWayBill />,
-      'trip-sheet': <TripSheet />,
-      'eway-bill': <EWayBill />,
-      'consignor-report': <ConsignorReport />,
-      'unload-report': <UnloadReport />,
-      'ack-report-bundle': <ACKReportBundle />,
-      'receive-payment': <ReceivePayment />,
-      'reports': <Reports />,
-      'update-delivery': <UpdateDelivery />,
-      'delivered-gc-report': <DeliveryStatusReport reportType="delivered" />,
-      'undelivered-gc-report': <DeliveryStatusReport reportType="undelivered" />,
-      'rto-report': <DeliveryStatusReport reportType="rto" />,
-      'delivery-status-report': <DeliveryStatusReport />
-    }
+    'inward-report': <InwardReport />,
+    'bulk-gc-inward': <BulkGCInward />,
+    'trip-sheet-entry': <TripSheetEntry />,
+    'local-trip-entry': <LocalTrip />,
+    'trip-sheet-ack': <TripSheetAck />,
+    'trip-sheet-report': <TripSheetReport />,
+    'local-trip-report': <LocalTripReport />,
+    'trip-sheet-alert': <TripSheetAlert />,
+    'trip-sheet-payment': <TripSheetPayment />,
+    'consignor-report-prepare': <ConsignorReportPrepare />,
+    'consignor-report-view': <ConsignorReportView />,
 
+    'generate-ack-report-id': <GenerateAckReportId />,
+    'ack-report-id-view': <AckReportIdView />,
+    'gc-wise-receive': <GCWiseReceive />,
+    'consignor-wise-receive': <ConsignorWiseReceive />,
+    'consignor-wise-receive-without-id': <ConsignorWiseReceiveWithoutId />,
+    'payment-pending-report': <PaymentPendingReport />,
+    'waybill-track': <WaybillTrack />,
+    'waybill-track-report': <WaybillReportPage />,
+    'waybill-report': <WaybillReportPage />,
+    'consignor-report-reports': <ConsignorReportReports />,
+    'dispatch-pending-report': <DispatchPendingReport />,
+    'trip-sheet-report-reports': <TripSheetReportReports />,
+    'audit-log-info': <AuditLogInfo />,
+    'inward-status-report': <InwardStatusReport />,
+    'ack-status-report': <AckStatusReport />,
+    'change-password': <ChangePassword />,
+    'headwise-report': <HeadwiseReport />,
+    'balance-sheet': <BalanceSheet />,
+    'booking-and-dispatch': <BookingAndDispatch />,
+    'profit-and-loss-report': <ProfitAndLossReport />,
+    'consignor-history-report': <ConsignorHistoryReport />,
+    'user-history-details': <UserHistoryDetails />,
+    'waybill-tally-report': <WaybillTallyReport />,
+    'income-expense-report': <IncomeExpenseReport />,
+    'trip-sheet-tally-report': <TripSheetTallyReport />,
+    'masters': <Masters />,
+    'waybill': <WayBill />,
+    'accounts': <Accounts />,
+    'inward-waybill': <InwardWayBill />,
+    'trip-sheet': <TripSheet />,
+    'eway-bill': <EWayBill />,
+    'consignor-report': <ConsignorReport />,
 
-
-    return componentMap[activeTabData.id] || <div className="p-6">Page not found</div>
+    'ack-report-bundle': <ACKReportBundle />,
+    'receive-payment': <ReceivePayment />,
+    'reports': <Reports />,
+    'update-delivery': <UpdateDelivery />,
+    'upload-pod': <UploadPod />,
+    'delivered-gc-report': <DeliveryStatusReport reportType="delivered" />,
+    'undelivered-gc-report': <DeliveryStatusReport reportType="undelivered" />,
+    'cancelled-gc-report': <DeliveryStatusReport reportType="cancelled" />,
+    'rto-report': <DeliveryStatusReport reportType="rto" />,
+    'pending-pod-report': <PendingPodReport />,
+    'delivery-status-report': <DeliveryStatusReport />,
+    'employee-management': <EmployeeManagement />,
+    'app-workflow': <AppWorkflow />,
+    'gc-format-print': <GCFormatPrint />,
+    'route-master': <RouteMaster />,
+    'route-trip-entry': <RouteTripSheetEntry />,
+    'route-analytics': <RouteAnalytics />,
+    'technical-support': <TechnicalSupport />,
+    'maintenance-billing': <MaintenanceBilling />,
+    'backup-options': <BackupOptions />
   }
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative print:block print:h-auto">
       {/* Modern Confirmation Modal */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 no-print">
@@ -252,7 +279,7 @@ function TabbedInterface() {
               </div>
               <h2 className="text-xl font-black text-orange-900">Limit Reached!</h2>
               <p className="text-gray-600 text-xs font-medium leading-relaxed px-4">
-                You can open a maximum of 6 tabs (excluding Dashboard).
+                You can open a maximum of 8 tabs (excluding Dashboard).
                 Please close an existing tab to open a new one.
               </p>
             </div>
@@ -294,8 +321,15 @@ function TabbedInterface() {
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-auto bg-white">
-        {renderActiveTabContent()}
+      <div className="flex-1 overflow-auto bg-white relative print:block print:overflow-visible">
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`h-full w-full ${activeTab === tab.id ? 'block' : 'hidden'}`}
+          >
+            {componentMap[tab.id] || <div className="p-6">Page not found: {tab.id}</div>}
+          </div>
+        ))}
       </div>
     </div>
   )

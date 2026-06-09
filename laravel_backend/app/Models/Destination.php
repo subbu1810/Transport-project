@@ -4,11 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Destination extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected $table = 'destinations';
 
@@ -22,14 +21,13 @@ class Destination extends Model
         'is_active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
     public static function createRules(): array
     {
         return [
             'taluk_id' => 'required|integer|exists:taluks,id',
-            'city_name' => 'required|string|max:100',
+            'city_name' => 'required|string|max:100|unique:destinations,city_name,NULL,id,taluk_id,' . request()->input('taluk_id'),
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -38,7 +36,7 @@ class Destination extends Model
     {
         return [
             'taluk_id' => 'nullable|integer|exists:taluks,id',
-            'city_name' => 'nullable|string|max:100',
+            'city_name' => 'nullable|string|max:100|unique:destinations,city_name,' . $id . ',id,taluk_id,' . request()->input('taluk_id'),
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -50,12 +48,12 @@ class Destination extends Model
 
     public function district()
     {
-        return $this->hasOneThrough(District::class, Taluk::class, 'id', 'id', 'taluk_id', 'district_id');
+        return $this->taluk()?->get()->first()?->district();
     }
 
     public function state()
     {
-        return $this->hasOneThrough(State::class, [Taluk::class, District::class], ['id', 'district_id'], ['taluk_id', 'state_id']);
+        return $this->district()?->get()->first()?->state();
     }
 
     public function branchMappings()

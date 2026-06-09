@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
-
-const API_URL = 'http://localhost:8000/api/v1'
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
 
 function ScreenAssignment() {
   const [admins, setAdmins] = useState([])
@@ -18,7 +17,10 @@ function ScreenAssignment() {
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
 
+  const [currentUser, setCurrentUser] = useState(null)
   useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user'))
+    setCurrentUser(user)
     fetchAdmins()
     fetchAvailableScreens()
   }, [])
@@ -45,7 +47,7 @@ function ScreenAssignment() {
 
   const fetchAdmins = async () => {
     try {
-      const response = await fetch(`${API_URL}/admins`)
+      const response = await fetch(`${API_BASE_URL}/admins`)
       const data = await response.json()
       if (data.success) {
         setAdmins(data.data)
@@ -58,7 +60,7 @@ function ScreenAssignment() {
 
   const fetchAvailableScreens = async () => {
     try {
-      const response = await fetch(`${API_URL}/screen-assignments/all-screens`)
+      const response = await fetch(`${API_BASE_URL}/screen-assignments/all-screens`)
       const data = await response.json()
       if (data.success) {
         setAvailableScreens(data.data)
@@ -72,7 +74,7 @@ function ScreenAssignment() {
   const fetchAdminAssignments = async (adminId) => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_URL}/screen-assignments/admin/${adminId}`)
+      const response = await fetch(`${API_BASE_URL}/screen-assignments/admin/${adminId}`)
       const data = await response.json()
       if (data.success) {
         if (data.is_superadmin) {
@@ -150,7 +152,7 @@ function ScreenAssignment() {
         })
       })
 
-      const response = await fetch(`${API_URL}/screen-assignments/assign`, {
+      const response = await fetch(`${API_BASE_URL}/screen-assignments/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,6 +177,18 @@ function ScreenAssignment() {
     } finally {
       setSaving(false)
     }
+  }
+
+  if (currentUser && currentUser.role !== 'superadmin') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4 text-center">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600">
+          <AlertCircle size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">Access Denied</h2>
+        <p className="text-gray-600 mt-2 font-medium">Only Super Administrators have access to Screen Assignments.</p>
+      </div>
+    )
   }
 
   return (

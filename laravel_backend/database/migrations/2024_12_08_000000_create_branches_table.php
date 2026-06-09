@@ -11,27 +11,29 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('branches', function (Blueprint $table) {
-            $table->id();
-            $table->string('branch_code', 50)->unique();
-            $table->string('branch_name', 100);
-            $table->string('address', 255)->nullable();
-            $table->string('city', 50)->nullable();
-            $table->string('state', 50)->nullable();
-            $table->string('pincode', 10)->nullable();
-            $table->string('phone', 20)->nullable();
-            $table->string('email', 100)->nullable();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            $table->softDeletes();
+        if (!Schema::hasTable('branches')) {
+            Schema::create('branches', function (Blueprint $table) {
+                $table->id();
+                $table->string('branch_code', 50)->unique();
+                $table->string('branch_name', 100);
+                $table->string('address', 255)->nullable();
+                $table->string('city', 50)->nullable();
+                $table->string('taluk', 50)->nullable();
+                $table->string('state', 50)->nullable();
+                $table->string('pincode', 10)->nullable();
+                $table->string('phone', 20)->nullable();
+                $table->string('email', 100)->nullable();
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+                $table->softDeletes();
 
-            // Indexes
-            $table->index('branch_code');
-            $table->index('branch_name');
-            $table->index('city');
-            $table->index('is_active');
-            $table->index('created_at');
-        });
+                // Indexes
+                $table->index('branch_code');
+                $table->index('branch_name');
+                $table->index('city');
+                $table->index('is_active');
+            });
+        }
     }
 
     /**

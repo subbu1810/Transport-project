@@ -10,10 +10,24 @@ use Illuminate\Validation\ValidationException;
 
 class VehicleController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
-            $vehicles = Vehicle::with('branch')->orderBy('vehicle_number', 'asc')->get();
+            $query = Vehicle::with(['branch', 'lastTrip']);
+
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $branchId = (int)$request->branch_id;
+                
+                $query->where(function($q) use ($branchId) {
+                    // 1. Vehicle is available if it has NO active trip (un-acknowledged) where THIS branch is the sender
+                    $q->whereDoesntHave('lastTrip', function($lq) use ($branchId) {
+                        $lq->whereNull('ack_date')
+                           ->where('dispatch_branch_id', $branchId);
+                    });
+                });
+            }
+
+            $vehicles = $query->orderBy('vehicle_number', 'asc')->get();
 
             return response()->json([
                 'success' => true,
@@ -150,11 +164,18 @@ class VehicleController extends Controller
                 return $this->errorResponse('Search query is required', 400);
             }
 
-            $vehicles = Vehicle::with('branch')
-                ->where('vehicle_number', 'like', "%{$query}%")
-                ->orWhere('owner_name', 'like', "%{$query}%")
-                ->orWhere('phone', 'like', "%{$query}%")
-                ->orWhere('vehicle_status', 'like', "%{$query}%")
+            $queryObj = Vehicle::with('branch');
+
+            if ($request->has('branch_id') && $request->branch_id !== 'All' && $request->branch_id !== '') {
+                $queryObj->where('branch_id', $request->branch_id);
+            }
+
+            $vehicles = $queryObj->where(function(\Illuminate\Database\Eloquent\Builder $q) use ($query) {
+                    $q->where('vehicle_number', 'like', "%{$query}%")
+                      ->orWhere('owner_name', 'like', "%{$query}%")
+                      ->orWhere('phone', 'like', "%{$query}%")
+                      ->orWhere('vehicle_status', 'like', "%{$query}%");
+                })
                 ->get();
 
             return response()->json([

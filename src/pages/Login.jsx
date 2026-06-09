@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User, Lock } from 'lucide-react'
 import loginBg from '../assets/login-bg.png'
+import { API_BASE_URL, STORAGE_URL } from '../config/api';
 
 function Login({ onLoginSuccess }) {
   const navigate = useNavigate()
@@ -22,7 +23,7 @@ function Login({ onLoginSuccess }) {
       setLoading(true)
       setError('')
 
-      const response = await fetch('http://localhost:8000/api/v1/admins/login', {
+      const response = await fetch(`${API_BASE_URL}/admins/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,14 +41,23 @@ function Login({ onLoginSuccess }) {
         localStorage.setItem('user', JSON.stringify({
           id: data.data.id,
           username: data.data.name,
+          name: data.data.name,
+          full_name: data.data.full_name,
           email: data.data.email,
           role: data.data.role,
           branch_code: data.data.branch_code,
           branch_name: data.data.branch_name,
+          branch_phone: data.data.branch_phone,
+          phone_number: data.data.phone_number,
           branch_id: data.data.branch_id,
+          transport_id: data.data.transport_id,
           transport_name: data.data.transport_name,
           transport_address: data.data.transport_address,
-          transport_phone: data.data.transport_phone
+          transport_phone: data.data.transport_phone,
+          transport_mobile: data.data.transport_mobile,
+          transport_email: data.data.transport_email,
+          transport_gstin: data.data.transport_gstin || data.data.gst_number,
+          transport_logo_url: data.data.transport_logo_url
         }))
 
         if (onLoginSuccess) onLoginSuccess()
@@ -159,7 +169,7 @@ function Login({ onLoginSuccess }) {
 
         {/* Footer */}
         <div className="text-center pt-6 border-t border-gray-100">
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Transport Management System v2.0</p>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Garuda Transport Erp v1.0</p>
         </div>
       </div>
     </div>

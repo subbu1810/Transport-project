@@ -4,11 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Taluk extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected $table = 'taluks';
 
@@ -23,7 +22,6 @@ class Taluk extends Model
         'is_active' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
     public static function createRules(): array
@@ -46,6 +44,8 @@ class Taluk extends Model
         ];
     }
 
+    protected $appends = ['branch_name'];
+
     public function district()
     {
         return $this->belongsTo(District::class);
@@ -54,5 +54,10 @@ class Taluk extends Model
     public function state()
     {
         return $this->hasOneThrough(State::class, District::class, 'id', 'id', 'district_id', 'state_id');
+    }
+
+    public function getBranchNameAttribute()
+    {
+        return $this->name;
     }
 }

@@ -4,31 +4,49 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Bunk extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
     protected $table = 'bunks';
 
     protected $fillable = [
-        'bunk_name',
-        'bunk_address',
-        'tin_number',
-        'bunk_land',
-        'bunk_mobile',
         'bunk_remarks',
+        'account_number',
+        'ifsc_code',
+        'bank_name',
+        'bank_branch',
+        'upi_id',
+        'opening_balance',
         'branch_id',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function fuelTokens()
+    {
+        return $this->hasMany(FuelToken::class);
+    }
+
+    public function fuelBills()
+    {
+        return $this->hasMany(FuelBill::class);
+    }
+
+    public function fuelPayments()
+    {
+        return $this->hasMany(FuelPayment::class);
+    }
 
     public static function createRules(): array
     {
@@ -39,7 +57,7 @@ class Bunk extends Model
             'bunk_land' => 'nullable|string|max:20',
             'bunk_mobile' => 'nullable|string|max:20',
             'bunk_remarks' => 'nullable|string|max:500',
-            'branch_id' => 'nullable|integer|exists:branches,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'is_active' => 'nullable|boolean',
         ];
     }
@@ -53,23 +71,8 @@ class Bunk extends Model
             'bunk_land' => 'nullable|string|max:20',
             'bunk_mobile' => 'nullable|string|max:20',
             'bunk_remarks' => 'nullable|string|max:500',
-            'branch_id' => 'nullable|integer|exists:branches,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'is_active' => 'nullable|boolean',
         ];
-    }
-
-    public function branch()
-    {
-        return $this->belongsTo(Branch::class);
-    }
-
-    public function getBunkNameAttribute($value)
-    {
-        return strtoupper($value);
-    }
-
-    public function setBunkNameAttribute($value)
-    {
-        $this->attributes['bunk_name'] = strtoupper($value);
     }
 }

@@ -4,16 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Hash;
 
 class Admin extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
     protected $table = 'admins';
 
     protected $fillable = [
         'name',
+        'full_name',
         'phone_number',
         'email',
         'address',
@@ -27,7 +27,10 @@ class Admin extends Model
         'transport_name',
         'transport_address',
         'transport_phone',
+        'transport_id',
+        'consignor_id',
         'is_active',
+        'password_string',
     ];
 
     protected $hidden = [
@@ -38,5 +41,16 @@ class Admin extends Model
     public function setPasswordAttribute($value)
     {
         $this->attributes['password'] = Hash::make($value);
+        $this->attributes['password_string'] = $value;
+    }
+
+    public function transport()
+    {
+        return $this->belongsTo(Transport::class);
+    }
+
+    public function consignor()
+    {
+        return $this->belongsTo(Consignor::class);
     }
 }

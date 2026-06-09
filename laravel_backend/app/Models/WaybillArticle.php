@@ -20,6 +20,8 @@ class WaybillArticle extends Model
         'freight',
         'actual_weight',
         'charged_weight',
+        'dd_rate',
+        'dd_total',
         'amount',
     ];
 
