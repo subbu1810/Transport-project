@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   FileEdit,
   LocateFixed,
-  CheckSquare
+  CheckSquare,
+  Image as ImageIcon
 } from 'lucide-react'
 
 function Sidebar({ isOpen, onToggle }) {
@@ -59,7 +60,7 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'User Details', path: '/user-details', icon: LayoutDashboard },
         { label: 'Role Details', path: '/role-details', icon: LayoutDashboard },
         { label: 'Screen Assignment', path: '/screen-assignment', icon: LayoutDashboard },
-        { label: 'System Settings', path: '/manage-logo', icon: Settings },
+        { label: 'Manage Logo', path: '/manage-logo', icon: ImageIcon },
       ]
     },
     {

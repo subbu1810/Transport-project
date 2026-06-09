@@ -104,11 +104,11 @@ const SystemSettings = () => {
             <div className="max-w-4xl mx-auto">
                 <div className="flex items-center gap-3 mb-8">
                     <div className="p-3 bg-green-600 rounded-xl shadow-lg shadow-green-100">
-                        <Settings className="text-white" size={24} />
+                        <ImageIcon className="text-white" size={24} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-black text-gray-800 tracking-tight">SYSTEM SETTINGS</h1>
-                        <p className="text-sm text-gray-500 font-medium">Manage company branding and global configurations</p>
+                        <h1 className="text-2xl font-black text-gray-800 tracking-tight uppercase">Logo Management</h1>
+                        <p className="text-sm text-gray-500 font-medium">Manage company branding and report headers</p>
                     </div>
                 </div>
 
