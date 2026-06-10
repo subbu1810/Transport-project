@@ -37,6 +37,9 @@ export default function MoreScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </ScrollView>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>© 2026 S Square G Tech Solutions Pvt Ltd. All Rights Reserved.</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -89,5 +92,17 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 24,
     color: '#cbd5e1',
+  },
+  footer: {
+    padding: 15,
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
   },
 });

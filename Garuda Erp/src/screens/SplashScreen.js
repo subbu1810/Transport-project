@@ -25,10 +25,11 @@ export default function SplashScreen({ navigation }) {
     // Check auth status while animating
     const checkAuth = async () => {
       try {
+        const user = await AsyncStorage.getItem('user');
         const token = await AsyncStorage.getItem('token');
         // Wait for 2 seconds to let the user see the beautiful garuda logo animation
         setTimeout(() => {
-          if (token) {
+          if (user || token) {
             navigation.replace('Home');
           } else {
             navigation.replace('Login');

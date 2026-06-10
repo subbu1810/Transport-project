@@ -1,0 +1,36 @@
+diff --git a/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle b/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+index bcf9b00..f1b6fdc 100644
+--- a/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
++++ b/node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+@@ -25,14 +25,15 @@ class KotlinExpoModulesCorePlugin implements Plugin<Project> {
+           "1.8.0": "1.8.0-1.0.9",
+           "1.8.10": "1.8.10-1.0.9",
+           "1.8.22": "1.8.22-1.0.11",
+-          "1.9.23": "1.9.23-1.0.20"
++          "1.9.23": "1.9.23-1.0.20",
++          "2.0.21": "2.0.21-1.0.28"
+         ]
+ 
+         project.rootProject.ext.has("kspVersion")
+           ? project.rootProject.ext.get("kspVersion")
+           : kspVersionsMap.containsKey(project.ext.kotlinVersion())
+           ? kspVersionsMap.get(project.ext.kotlinVersion())
+-          : "1.9.23-1.0.20"
++          : "2.0.21-1.0.28"
+       }
+     }
+   }
+@@ -82,7 +83,12 @@ ext.useExpoPublishing = {
+     publishing {
+       publications {
+         release(MavenPublication) {
+-          from components.release
++          // AGP 8+ registers components lazily; look it up safely instead of
++          // directly accessing components.release which may not exist yet.
++          def releaseComponent = project.components.findByName("release")
++          if (releaseComponent != null) {
++            from releaseComponent
++          }
+         }
+       }
+       repositories {
