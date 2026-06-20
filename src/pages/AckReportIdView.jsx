@@ -10,6 +10,8 @@ function AckReportIdView() {
   const [bundleData, setBundleData] = useState(null)
   const [popup, setPopup] = useState({ show: false, message: '', type: 'success' })
   const [transportInfo, setTransportInfo] = useState({ name: '', subtitle: 'THE WINGS OF LOGISTICS' })
+  const [ackSearch, setAckSearch] = useState('')
+  const [showAckDropdown, setShowAckDropdown] = useState(false)
 
   useEffect(() => {
     fetchBundles()
@@ -119,23 +121,85 @@ function AckReportIdView() {
         <div className="no-print bg-white p-3 border border-gray-200 rounded shadow-sm mb-4 flex flex-col md:flex-row items-end gap-3">
            <div className="flex-1 w-full space-y-1">
               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Selection Trace ID</label>
+              {/* Searchable Dropdown */}
               <div className="relative">
-                 <select
-                   value={filters.ackReportId}
-                   onChange={(e) => {
-                     setFilters({ ackReportId: e.target.value })
-                     if (e.target.value) handleSearch(e.target.value)
-                   }}
-                   className="w-full pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded font-black text-gray-700 text-[11px] outline-none focus:border-green-600 transition-all appearance-none cursor-pointer"
-                 >
-                   <option value="">SELECT BUNDLE BY DATE</option>
-                   {bundles.map(b => (
-                     <option key={b.id} value={b.bundle_number}>
-                       {b.bundle_number} — {new Date(b.bundle_date).toLocaleDateString('en-GB')} ({b.waybills_count} GCs)
-                     </option>
-                   ))}
-                 </select>
-                 <Eye size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
+                <div
+                  className={`flex items-center gap-2 pl-3 pr-2 py-2 bg-gray-50 border rounded font-black text-gray-700 text-[11px] cursor-text transition-all ${
+                    showAckDropdown ? 'border-green-600 ring-1 ring-green-200 bg-white' : 'border-gray-200 hover:border-green-400'
+                  }`}
+                  onClick={() => setShowAckDropdown(true)}
+                >
+                  <Search size={12} className="text-gray-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder={filters.ackReportId ? filters.ackReportId : 'Search by bundle no or date...'}
+                    value={showAckDropdown ? ackSearch : (filters.ackReportId || '')}
+                    onChange={(e) => { setAckSearch(e.target.value); setShowAckDropdown(true) }}
+                    onFocus={() => { setShowAckDropdown(true); setAckSearch('') }}
+                    onBlur={() => setTimeout(() => setShowAckDropdown(false), 180)}
+                    className="flex-1 outline-none bg-transparent font-black text-gray-800 placeholder:text-gray-400 placeholder:font-medium text-[11px] uppercase min-w-0"
+                  />
+                  {filters.ackReportId && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); setFilters({ ackReportId: '' }); setAckSearch(''); setBundleData(null) }}
+                      className="text-gray-300 hover:text-red-400 transition-colors shrink-0 font-black text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-400 shrink-0 transition-transform ${showAckDropdown ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+
+                {showAckDropdown && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border-2 border-green-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {bundles
+                      .filter(b => {
+                        if (!ackSearch) return true
+                        const q = ackSearch.toLowerCase()
+                        return (
+                          (b.bundle_number || '').toLowerCase().includes(q) ||
+                          new Date(b.bundle_date).toLocaleDateString('en-GB').includes(q)
+                        )
+                      })
+                      .length === 0 ? (
+                      <div className="px-4 py-3 text-[10px] text-gray-400 font-bold text-center">No records found</div>
+                    ) : (
+                      bundles
+                        .filter(b => {
+                          if (!ackSearch) return true
+                          const q = ackSearch.toLowerCase()
+                          return (
+                            (b.bundle_number || '').toLowerCase().includes(q) ||
+                            new Date(b.bundle_date).toLocaleDateString('en-GB').includes(q)
+                          )
+                        })
+                        .map(b => {
+                          const isSelected = filters.ackReportId === b.bundle_number
+                          return (
+                            <div
+                              key={b.id}
+                              onMouseDown={() => {
+                                setFilters({ ackReportId: b.bundle_number })
+                                setAckSearch('')
+                                setShowAckDropdown(false)
+                                // Auto-fetch on selection
+                                handleSearch(b.bundle_number)
+                              }}
+                              className={`px-3 py-2 cursor-pointer text-[10px] font-bold flex flex-col gap-0.5 transition-colors ${
+                                isSelected ? 'bg-green-50 text-green-800' : 'hover:bg-gray-50 text-gray-800'
+                              }`}
+                            >
+                              <span className="font-black tracking-wide uppercase">{b.bundle_number}</span>
+                              <span className="text-[9px] text-gray-400 font-medium normal-case">
+                                {new Date(b.bundle_date).toLocaleDateString('en-GB')} &bull; {b.waybills_count} GCs
+                              </span>
+                            </div>
+                          )
+                        })
+                    )}
+                  </div>
+                )}
               </div>
            </div>
            <button

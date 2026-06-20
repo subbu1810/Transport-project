@@ -18,6 +18,8 @@ function ConsignorReportView() {
   const [success, setSuccess] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [tableFilters, setTableFilters] = useState({ deliverStatus: '', paymentStatus: '' })
+  const [reportSearch, setReportSearch] = useState('')
+  const [showReportDropdown, setShowReportDropdown] = useState(false)
   const [settings, setSettings] = useState({ 
     company_name: '', 
     address: '', 
@@ -241,23 +243,99 @@ function ConsignorReportView() {
             <div className="space-y-1">
               <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest ml-1 italic">Select Consignor Report ID</label>
               <div className="flex gap-2">
-                <select
-                  value={filters.consignorReportId}
-                  onChange={(e) => setFilters({ ...filters, consignorReportId: e.target.value })}
-                  className="flex-1 px-3 py-1 border-2 border-slate-200 rounded-lg focus:border-green-500 outline-none font-bold text-gray-800 text-[10px] shadow-sm uppercase transition-all bg-white"
-                >
-                  <option value="">-- Choose ID --</option>
-                  {receipts.map(r => {
-                    const periodString = r.from_date && r.to_date 
-                      ? `${formatDate(r.from_date)} — ${formatDate(r.to_date)}`
-                      : formatDate(r.transaction_date);
-                    return (
-                      <option key={r.id} value={r.receipt_no}>
-                        {r.receipt_no} - {r.consignor?.name} ({periodString})
-                      </option>
-                    )
-                  })}
-                </select>
+                {/* Searchable Dropdown */}
+                <div className="relative flex-1">
+                  <div
+                    className={`flex items-center gap-2 px-3 py-1 border-2 rounded-lg bg-white cursor-text transition-all ${
+                      showReportDropdown ? 'border-green-500 ring-1 ring-green-200' : 'border-slate-200 hover:border-green-400'
+                    }`}
+                    onClick={() => setShowReportDropdown(true)}
+                  >
+                    <Search size={12} className="text-gray-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder={filters.consignorReportId ? filters.consignorReportId : 'Search by ID or consignor name...'}
+                      value={showReportDropdown ? reportSearch : (filters.consignorReportId || '')}
+                      onChange={(e) => { setReportSearch(e.target.value); setShowReportDropdown(true) }}
+                      onFocus={() => { setShowReportDropdown(true); setReportSearch('') }}
+                      onBlur={() => setTimeout(() => setShowReportDropdown(false), 180)}
+                      className="flex-1 outline-none bg-transparent font-bold text-gray-800 placeholder:text-gray-400 placeholder:font-medium text-[10px] uppercase min-w-0"
+                    />
+                    {filters.consignorReportId && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setFilters({ ...filters, consignorReportId: '' }); setReportSearch(''); setReceiptData(null) }}
+                        className="text-gray-300 hover:text-red-400 transition-colors shrink-0 text-xs font-black"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-400 shrink-0 transition-transform ${showReportDropdown ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+
+                  {showReportDropdown && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border-2 border-green-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      {receiptsLoading ? (
+                        <div className="px-4 py-3 text-[10px] text-gray-400 font-bold text-center">Loading...</div>
+                      ) : receipts
+                          .filter(r => {
+                            if (!reportSearch) return true
+                            const q = reportSearch.toLowerCase()
+                            return (
+                              (r.receipt_no || '').toLowerCase().includes(q) ||
+                              (r.consignor?.name || '').toLowerCase().includes(q)
+                            )
+                          })
+                          .length === 0 ? (
+                        <div className="px-4 py-3 text-[10px] text-gray-400 font-bold text-center">No records found</div>
+                      ) : (
+                        receipts
+                          .filter(r => {
+                            if (!reportSearch) return true
+                            const q = reportSearch.toLowerCase()
+                            return (
+                              (r.receipt_no || '').toLowerCase().includes(q) ||
+                              (r.consignor?.name || '').toLowerCase().includes(q)
+                            )
+                          })
+                          .map(r => {
+                            const periodString = r.from_date && r.to_date
+                              ? `${formatDate(r.from_date)} — ${formatDate(r.to_date)}`
+                              : formatDate(r.transaction_date)
+                            const isSelected = filters.consignorReportId === r.receipt_no
+                            return (
+                              <div
+                                key={r.id}
+                                onMouseDown={() => {
+                                  setFilters({ ...filters, consignorReportId: r.receipt_no })
+                                  setReportSearch('')
+                                  setShowReportDropdown(false)
+                                  // Auto-fetch on select
+                                  setTimeout(() => {
+                                    setValidationError('')
+                                    setError(null)
+                                    setReceiptData(null)
+                                    setLoading(true)
+                                    axios.get(`${API_BASE_URL}/consignor-receipts/${r.receipt_no.trim()}`)
+                                      .then(res => { if (res.data.success) setReceiptData(res.data.data) })
+                                      .catch(err => setError(err.response?.data?.message || 'Failed to fetch details'))
+                                      .finally(() => setLoading(false))
+                                  }, 0)
+                                }}
+                                className={`px-3 py-2 cursor-pointer text-[10px] font-bold flex flex-col gap-0.5 transition-colors ${
+                                  isSelected ? 'bg-green-50 text-green-800' : 'hover:bg-gray-50 text-gray-800'
+                                }`}
+                              >
+                                <span className="font-black tracking-wide uppercase">{r.receipt_no}</span>
+                                <span className="text-[9px] text-gray-400 font-medium normal-case">{r.consignor?.name} &bull; {periodString}</span>
+                              </div>
+                            )
+                          })
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={handleGetDetails}
                   disabled={loading || receiptsLoading}

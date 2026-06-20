@@ -38,27 +38,46 @@ function App() {
   const [isBackupLocked, setIsBackupLocked] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const checkBackupStatus = (user) => {
+  const checkBackupStatus = async (user) => {
     if (!user) {
         setIsBackupLocked(false);
         return;
     }
 
-    const lastBackupDateStr = localStorage.getItem('last_backup_download_date');
-    if (!lastBackupDateStr) {
-        setIsBackupLocked(true);
-        return;
-    }
-
-    const lastBackupDate = new Date(lastBackupDateStr);
-    const today = new Date();
-    const diffTime = Math.abs(today - lastBackupDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-    if (diffDays >= 7) {
-        setIsBackupLocked(true);
-    } else {
-        setIsBackupLocked(false);
+    try {
+        const response = await fetch(`${API_BASE_URL}/settings/backup/global-status`);
+        const data = await response.json();
+        
+        if (data.success) {
+            setIsBackupLocked(data.locked);
+            if (!data.locked) {
+                // Keep local storage in sync just in case
+                if (data.last_download) {
+                    localStorage.setItem('last_backup_download_date', data.last_download.created_at);
+                }
+            }
+        } else {
+            // Fallback to local storage if API fails
+            const lastBackupDateStr = localStorage.getItem('last_backup_download_date');
+            if (!lastBackupDateStr) {
+                setIsBackupLocked(true);
+            } else {
+                const diffTime = Math.abs(new Date() - new Date(lastBackupDateStr));
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                setIsBackupLocked(diffDays >= 7);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to check global backup status', error);
+        // Fallback to local storage
+        const lastBackupDateStr = localStorage.getItem('last_backup_download_date');
+        if (!lastBackupDateStr) {
+            setIsBackupLocked(true);
+        } else {
+            const diffTime = Math.abs(new Date() - new Date(lastBackupDateStr));
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            setIsBackupLocked(diffDays >= 7);
+        }
     }
   };
 
@@ -161,7 +180,7 @@ function App() {
   if (isAuthenticated && isBackupLocked) {
       return <ForceBackupOverlay onComplete={() => {
           localStorage.setItem('last_backup_download_date', new Date().toISOString());
-          setIsBackupLocked(false);
+          checkBackupStatus(JSON.parse(localStorage.getItem('user'))); // re-verify with backend
       }} />
   }
 

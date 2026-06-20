@@ -365,7 +365,7 @@ function ConsignorHistoryReport() {
         lineColor: [100, 100, 100],
         lineWidth: 0.25,
         textColor: [0, 0, 0],
-        overflow: 'ellipsis',   // ← single-line, no wrapping
+        overflow: 'linebreak',
         valign: 'middle',
       },
       headStyles: {
@@ -382,12 +382,12 @@ function ConsignorHistoryReport() {
       bodyStyles:         { fillColor: [255, 255, 255] },
       alternateRowStyles: { fillColor: [248, 248, 248] },
       columnStyles: {
-        // 16 cols: 20+52+46+32+190+94+20+28+36+56+26+30+30+26+72+34 = 792 pt (full width)
+        // 16 cols: 20+52+46+50+172+94+20+28+36+56+26+30+30+26+72+34 = 792 pt (full width)
         0:  { halign: 'center', cellWidth: 20  },  // #
         1:  { halign: 'center', cellWidth: 52  },  // Bill Date
         2:  { halign: 'center', cellWidth: 46  },  // GC No
-        3:  { halign: 'center', cellWidth: 32  },  // Inv No
-        4:  { halign: 'left',   cellWidth: 190 },  // Consignee  (-22 to fit Rate col)
+        3:  { halign: 'center', cellWidth: 50  },  // Inv No
+        4:  { halign: 'left',   cellWidth: 172 },  // Consignee  (-22 to fit Rate col)
         5:  { halign: 'left',   cellWidth: 94  },  // Destination (-14 to fit Rate col)
         6:  { halign: 'center', cellWidth: 20  },  // Art
         7:  { halign: 'right',  cellWidth: 28  },  // Wt

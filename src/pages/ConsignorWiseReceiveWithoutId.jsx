@@ -28,6 +28,7 @@ function ConsignorWiseReceiveWithoutId() {
   const [consignorSearch, setConsignorSearch] = useState('')
   const [gcSearch, setGcSearch] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [overallDiscount, setOverallDiscount] = useState(0)
 
   const [paymentHeader, setPaymentHeader] = useState({
     receivedDate: new Date().toISOString().split('T')[0],
@@ -191,19 +192,9 @@ function ConsignorWiseReceiveWithoutId() {
       const current = prev[id] || { paid: 0, discount: 0, selected: true }
       let updated = { ...current, [field]: newVal }
 
-      if (field === 'discount') {
-        if (updated.discount > balance) {
-          updated.discount = balance
-          updated.paid = 0
-        } else if (updated.paid + updated.discount > balance) {
-          updated.paid = Math.max(0, balance - updated.discount)
-        }
-      } else if (field === 'paid') {
+      if (field === 'paid') {
         if (updated.paid > balance) {
           updated.paid = balance
-          updated.discount = 0
-        } else if (updated.paid + updated.discount > balance) {
-          updated.discount = Math.max(0, balance - updated.paid)
         }
       }
 
@@ -211,9 +202,9 @@ function ConsignorWiseReceiveWithoutId() {
     })
   }
 
-  const activeSelections = Object.entries(selectedWaybills).filter(([, v]) => v.selected && (v.paid > 0 || v.discount > 0))
+  const activeSelections = Object.entries(selectedWaybills).filter(([, v]) => v.selected && v.paid > 0)
   const totalToReceive = activeSelections.reduce((sum, [, item]) => sum + item.paid, 0)
-  const totalDiscount = activeSelections.reduce((sum, [, item]) => sum + item.discount, 0)
+  const totalDiscount = overallDiscount
 
   const handleSubmit = async () => {
     if (isClosed) {
@@ -221,14 +212,32 @@ function ConsignorWiseReceiveWithoutId() {
       return
     }
 
-    const paymentList = activeSelections.map(([id, data]) => ({
-      id: parseInt(id),
-      paid_amount: data.paid,
-      discount: data.discount
-    }))
+    const paymentList = []
+    let remainingDiscount = parseFloat(overallDiscount) || 0;
+
+    activeSelections.forEach(([id, data]) => {
+      const wb = waybills.find(w => w.id === parseInt(id));
+      const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0);
+      
+      const allocatedDiscount = Math.min(data.paid, remainingDiscount);
+      remainingDiscount -= allocatedDiscount;
+      
+      const paidAmount = Math.max(0, data.paid - allocatedDiscount);
+      
+      paymentList.push({
+        id: parseInt(id),
+        paid_amount: paidAmount,
+        discount: allocatedDiscount
+      });
+    });
 
     if (paymentList.length === 0) {
       showNotification('error', 'Select at least one GC with an amount to receive')
+      return
+    }
+
+    if (overallDiscount > totalToReceive) {
+      showNotification('error', 'Overall discount cannot exceed the total receiving amount.')
       return
     }
 
@@ -247,7 +256,8 @@ function ConsignorWiseReceiveWithoutId() {
 
       const response = await axios.post(`${API_BASE_URL}/waybills/bulk-receive-payment`, payload)
       if (response.data.success) {
-        const msg = `Bulk payment of ₹${(response.data.total_paid || totalToReceive).toLocaleString()} processed successfully!`
+        const netPaid = totalToReceive - overallDiscount
+        const msg = `Bulk payment of ₹${netPaid.toLocaleString()} processed successfully!`
         setSuccess(msg)
         showNotification('success', msg)
 
@@ -255,8 +265,8 @@ function ConsignorWiseReceiveWithoutId() {
           receipt_no: response.data.voucher_no || 'VOU-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
           date: paymentHeader.receivedDate,
           from: paymentHeader.payerName,
-          amount: response.data.total_paid || totalToReceive,
-          discount: totalDiscount,
+          amount: netPaid,
+          discount: overallDiscount,
           mode: paymentHeader.modeOfPay,
           refNo: paymentHeader.refNo,
           gcs: paymentList.length,
@@ -265,6 +275,7 @@ function ConsignorWiseReceiveWithoutId() {
         setLastPrintData(printData)
         setWaybills([])
         setSelectedWaybills({})
+        setOverallDiscount(0)
         setFilters(prev => ({ ...prev, consignor: '' }))
         setConsignorSearch('')
       }
@@ -640,124 +651,109 @@ function ConsignorWiseReceiveWithoutId() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {waybills.filter(wb => wb.gc_number.toLowerCase().includes(gcSearch.toLowerCase())).map((wb) => {
-                const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
-                const isPaid = balance <= 0
-                const sel = selectedWaybills[wb.id] || { paid: 0, discount: 0, selected: false }
-                const isSelected = sel.selected
-
-                return (
-                  <div
-                    key={wb.id}
-                    className={`bg-white rounded-2xl p-3 border-2 shadow-sm transition-all group ${
-                      isPaid
-                        ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
-                        : isSelected
-                          ? 'border-indigo-400 shadow-indigo-50 cursor-pointer hover:shadow-md'
-                          : 'border-slate-200 opacity-75 cursor-pointer hover:shadow-md hover:border-indigo-200'
-                    }`}
-                    onClick={() => !isPaid && toggleSelect(wb.id)}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-start gap-2">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-3 w-12 text-center">
                         <input
                           type="checkbox"
-                          checked={isSelected}
-                          disabled={isPaid}
-                          onChange={() => !isPaid && toggleSelect(wb.id)}
-                          className={`mt-0.5 w-4 h-4 border-slate-300 rounded focus:ring-indigo-500 ${
-                            isPaid ? 'opacity-30 cursor-not-allowed text-slate-400' : 'text-indigo-600 bg-slate-100 cursor-pointer'
-                          }`}
+                          checked={waybills.filter(wb => wb.gc_number.toLowerCase().includes(gcSearch.toLowerCase()) && (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0).length > 0 && waybills.filter(wb => wb.gc_number.toLowerCase().includes(gcSearch.toLowerCase()) && (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0).every(wb => selectedWaybills[wb.id]?.selected)}
+                          onChange={() => {
+                            const filteredWbs = waybills.filter(wb => wb.gc_number.toLowerCase().includes(gcSearch.toLowerCase()))
+                            const unpaidWbs = filteredWbs.filter(wb => (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0)
+                            if (unpaidWbs.length === 0) {
+                               showNotification('error', 'All visible GCs are already fully paid!')
+                               return
+                            }
+                            const allSelected = unpaidWbs.every(wb => selectedWaybills[wb.id]?.selected)
+                            setSelectedWaybills(prev => {
+                              const updated = { ...prev }
+                              filteredWbs.forEach(wb => {
+                                if (updated[wb.id]) {
+                                   const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
+                                   if (balance > 0) {
+                                     updated[wb.id] = { ...updated[wb.id], selected: !allSelected }
+                                   }
+                                }
+                              })
+                              return updated
+                            })
+                          }}
+                          className="w-4 h-4 border-slate-300 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
-                        <div>
-                          <div className={`text-xs font-black transition-colors uppercase ${
-                            isPaid ? 'text-slate-400' : isSelected ? 'text-indigo-700' : 'text-slate-500'
-                          }`}>
-                            {wb.gc_number}
-                          </div>
-                          <div className="flex items-center gap-1 text-[9px] text-slate-600 font-bold mt-0.5">
-                            <Clock size={10} /> {new Date(wb.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {isPaid ? (
-                          <div className="bg-emerald-50 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-lg border border-emerald-200 flex items-center gap-1">
-                            ✓ PAID
-                          </div>
-                        ) : (
-                          <div className="bg-green-50 text-green-600 text-[9px] font-black px-2 py-0.5 rounded-lg border border-green-100">
-                            DELIVERED
-                          </div>
-                        )}
-                        <div className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
-                          wb.account_type === 'account' ? 'bg-blue-50 text-blue-600' :
-                          wb.account_type === 'topay' ? 'bg-amber-50 text-amber-600' :
-                          'bg-slate-50 text-slate-500'
-                        }`}>{wb.account_type}</div>
-                      </div>
-                    </div>
+                      </th>
+                      <th className="p-3">GC Number</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Destination</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3 text-right">Billed (₹)</th>
+                      <th className="p-3 text-right">Received (₹)</th>
+                      <th className="p-3 text-right">Balance (₹)</th>
+                      <th className="p-3 w-40 text-center">Receive Amount (₹)</th>
+                      <th className="p-3 w-28 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {waybills.filter(wb => wb.gc_number.toLowerCase().includes(gcSearch.toLowerCase())).map((wb) => {
+                      const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
+                      const isPaid = balance <= 0
+                      const sel = selectedWaybills[wb.id] || { paid: 0, discount: 0, selected: false }
+                      const isSelected = sel.selected
 
-                    <div className="flex items-center gap-1 text-[9px] text-slate-600 font-bold mb-2">
-                      <MapPin size={9} /> {wb.destination?.city_name}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 mb-3 bg-slate-50/50 p-2 rounded-xl">
-                      <div>
-                        <p className="text-[8px] font-black text-slate-600 uppercase tracking-tighter">Billed</p>
-                        <p className="text-xs font-bold text-slate-700">₹{parseFloat(wb.grand_total).toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        {isPaid ? (
-                          <>
-                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-tighter">Received</p>
-                            <p className="text-xs font-black text-emerald-700">₹{parseFloat(wb.amount_paid || 0).toLocaleString()}</p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-[8px] font-black text-rose-600 uppercase tracking-tighter">Balance</p>
-                            <p className="text-xs font-black text-rose-700">₹{balance.toLocaleString()}</p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {!isPaid && isSelected && (
-                      <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-black text-slate-700 min-w-[50px]">Discount</span>
-                          <input
-                            type="number"
-                            value={sel.discount || ''}
-                            onChange={(e) => handleCellChange(wb.id, 'discount', e.target.value)}
-                            className="flex-1 h-7 bg-white border border-slate-200 focus:border-indigo-400 rounded-lg text-center font-bold text-slate-600 outline-none text-xs"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-black text-indigo-700 min-w-[50px]">Receive</span>
-                          <input
-                            type="number"
-                            value={sel.paid || ''}
-                            onChange={(e) => handleCellChange(wb.id, 'paid', e.target.value)}
-                            className="flex-1 h-8 bg-indigo-50/50 border border-indigo-100 focus:border-indigo-600 rounded-lg text-center font-black text-indigo-700 outline-none text-xs shadow-inner"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {!isPaid && !isSelected && (
-                      <div className="text-center text-[9px] text-slate-500 font-bold py-1">Click to select</div>
-                    )}
-
-                    {isPaid && (
-                      <div className="text-center text-[9px] text-emerald-400 font-black py-1 uppercase tracking-widest">Fully Paid</div>
-                    )}
-                  </div>
-                )
-              })}
+                      return (
+                        <tr 
+                          key={wb.id} 
+                          className={`hover:bg-slate-50/50 transition-colors ${
+                            isPaid ? 'bg-slate-50/50 opacity-60' : isSelected ? 'bg-indigo-50/10' : ''
+                          }`}
+                        >
+                          <td className="p-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isPaid}
+                              onChange={() => !isPaid && toggleSelect(wb.id)}
+                              className="w-4 h-4 border-slate-300 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                          </td>
+                          <td className="p-3 font-bold text-slate-800">{wb.gc_number}</td>
+                          <td className="p-3 text-slate-500">{new Date(wb.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                          <td className="p-3 text-slate-600">{wb.destination?.city_name || '-'}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              wb.account_type === 'account' ? 'bg-blue-50 text-blue-600' :
+                              wb.account_type === 'topay' ? 'bg-amber-50 text-amber-600' :
+                              'bg-slate-50 text-slate-500'
+                            }`}>{wb.account_type}</span>
+                          </td>
+                          <td className="p-3 text-right text-slate-700">₹{parseFloat(wb.grand_total).toLocaleString()}</td>
+                          <td className="p-3 text-right text-emerald-600">₹{parseFloat(wb.amount_paid || 0).toLocaleString()}</td>
+                          <td className="p-3 text-right text-rose-600 font-bold">₹{balance.toLocaleString()}</td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              value={isSelected && !isPaid ? sel.paid : ''}
+                              disabled={isPaid || !isSelected}
+                              onChange={(e) => handleCellChange(wb.id, 'paid', e.target.value)}
+                              className="w-32 h-8 px-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-lg text-center font-bold text-slate-700 outline-none text-xs disabled:bg-slate-100 disabled:text-slate-400"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="p-3 text-center">
+                            {isPaid ? (
+                              <span className="inline-block bg-emerald-50 text-emerald-600 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-emerald-200">✓ PAID</span>
+                            ) : (
+                              <span className="inline-block bg-green-50 text-green-600 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-green-100">DELIVERED</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Action Bar */}
@@ -769,8 +765,18 @@ function ConsignorWiseReceiveWithoutId() {
                     <span className="text-indigo-600 text-2xl font-black italic tracking-tighter">₹{totalToReceive.toLocaleString()}</span>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Discount</p>
-                    <p className="text-slate-600 text-xl font-black italic tracking-tighter">₹{totalDiscount.toLocaleString()}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Overall Discount</p>
+                    <input
+                      type="number"
+                      value={overallDiscount || ''}
+                      onChange={(e) => setOverallDiscount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-28 h-8 bg-indigo-50/50 border border-indigo-100 focus:border-indigo-600 rounded-lg text-center font-black text-indigo-700 outline-none text-xs shadow-inner"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Net Cash to Receive</p>
+                    <span className="text-emerald-600 text-2xl font-black italic tracking-tighter">₹{(totalToReceive - overallDiscount).toLocaleString()}</span>
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">GCs Selected</p>

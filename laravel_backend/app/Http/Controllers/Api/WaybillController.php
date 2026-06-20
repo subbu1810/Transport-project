@@ -301,21 +301,21 @@ class WaybillController extends Controller
 
             // Automatically create Cash Book Entry for 'Paid' GC at Booking Branch
             if ($isPaidImmediately) {
-                // $waybill->load('consignor');
-                // CashBookEntry::create([
-                //     'voucher_no' => 'BK-' . strtoupper(substr(uniqid(), -6)),
-                //     'transaction_date' => $validated['bill_date'],
-                //     'transaction_type' => 'CREDIT',
-                //     'account_head_id' => $this->getBookingAccountHeadId(),
-                //     'amount' => $validated['grand_total'],
-                //     'branch_id' => $validated['origin_branch_id'],
-                //     'paid_to_receive_from' => $waybill->consignor->name ?? 'Consignor',
-                //     'mode_of_pay' => 'CASH', // Default for booking
-                //     'remarks' => "Collected Booking Freight for GC: {$gcNumber}",
-                //     'authorised_by' => 'System Auto',
-                //     'paid_by_received_by' => 'Booking Clerk',
-                //     'is_closing_entry' => false
-                // ]);
+                $waybill->load('consignor');
+                CashBookEntry::create([
+                    'voucher_no' => 'BK-' . strtoupper(substr(uniqid(), -6)),
+                    'transaction_date' => $validated['bill_date'],
+                    'transaction_type' => 'CREDIT',
+                    'account_head_id' => $this->getBookingAccountHeadId(),
+                    'amount' => $validated['grand_total'],
+                    'branch_id' => $validated['origin_branch_id'],
+                    'paid_to_receive_from' => $waybill->consignor->name ?? 'Consignor',
+                    'mode_of_pay' => 'CASH', // Default for booking
+                    'remarks' => "Collected Booking Freight for GC: {$gcNumber}",
+                    'authorised_by' => 'System Auto',
+                    'paid_by_received_by' => 'Booking Clerk',
+                    'is_closing_entry' => false
+                ]);
 
                 // Create detailed payment record
                 WaybillPayment::create([
@@ -437,12 +437,15 @@ class WaybillController extends Controller
                 ], 404);
             }
 
-            // Prevent modification if already delivered
-            if (strtoupper($waybill->status) === 'DELIVERED' || strtoupper($waybill->deliver_status) === 'DELIVERED') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This Waybill has already been DELIVERED and cannot be modified.'
-                ], 400);
+            // Prevent modification if already delivered (unless superadmin)
+            $userRole = $request->input('role') ?? ($request->user()?->role ?? (auth()->user()?->role ?? ''));
+            if ($userRole !== 'superadmin') {
+                if (strtoupper($waybill->status) === 'DELIVERED' || strtoupper($waybill->deliver_status) === 'DELIVERED') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This Waybill has already been DELIVERED and cannot be modified.'
+                    ], 400);
+                }
             }
 
             $validated = $request->validate([
@@ -1512,6 +1515,14 @@ class WaybillController extends Controller
             }
 
             if ($totalPaidAmount > 0) {
+                $totalBeforeDiscount = $totalPaidAmount + $totalDiscountAmount;
+                $remarks = "Bulk Payment on: " . $validated['payment_date'] .
+                    " | Consignor: " . $validated['payer_name'] .
+                    ($validated['ref_no'] ? " [Ref: {$validated['ref_no']}]" : "") .
+                    " | Total: ₹" . number_format($totalBeforeDiscount, 2) .
+                    " | Discount: ₹" . number_format($totalDiscountAmount, 2) .
+                    " | Net Cash Received: ₹" . number_format($totalPaidAmount, 2);
+
                 // Create single Cash Book Entry for the bulk sum
                 CashBookEntry::create([
                     'voucher_no' => 'BLK-' . strtoupper(substr(uniqid(), -6)),
@@ -1522,9 +1533,7 @@ class WaybillController extends Controller
                     'branch_id' => $validated['branch_id'],
                     'paid_to_receive_from' => $validated['payer_name'],
                     'mode_of_pay' => strtoupper($validated['mode_of_pay']),
-                    'remarks' => "Bulk Payment for GCs: " . implode(', ', $gcNumbers) .
-                        ($validated['ref_no'] ? " [Ref: {$validated['ref_no']}]" : "") .
-                        ($totalDiscountAmount > 0 ? " (Total Discount: {$totalDiscountAmount})" : ""),
+                    'remarks' => $remarks,
                     'authorised_by' => 'User',
                     'paid_by_received_by' => $validated['payer_name'],
                     'is_closing_entry' => false
@@ -1554,7 +1563,8 @@ class WaybillController extends Controller
     public function getPaymentPendingReport(Request $request): JsonResponse
     {
         try {
-            $query = Waybill::with('consignor')
+            // Return individual GC records (flat list) with outstanding balance
+            $query = Waybill::with(['consignor', 'originBranch', 'destination'])
                 ->whereRaw('grand_total > (COALESCE(amount_paid, 0) + 0.01)'); // Use small epsilon for float comparison
 
             if ($request->filled('from_date')) {
@@ -1566,42 +1576,36 @@ class WaybillController extends Controller
             if ($request->filled('branch_id') && $request->branch_id !== 'All Branches') {
                 $query->where('origin_branch_id', $request->branch_id);
             }
+            if ($request->filled('consignor_id')) {
+                $query->where('consignor_id', $request->consignor_id);
+            }
+            if ($request->filled('account_type')) {
+                $query->where('account_type', $request->account_type);
+            }
 
-            // Group by consignor and account type to summarize
-            $summarized = $query->get()
-                ->groupBy(function ($wb) {
-                    return ($wb->consignor->name ?? 'Unknown') . '|' . ($wb->account_type ?? 'Other');
-                })
-                ->map(function ($group) {
-                    $first = $group->first();
-                    $totalGrand = $group->sum('grand_total');
-                    $totalPaid = $group->sum('amount_paid');
-                    return [
-                        'consignor_name' => $first->consignor->name ?? 'Unknown',
-                        'account_type' => $first->account_type ?? 'Other',
-                        'count' => $group->count(),
-                        'total_amount' => (float) $totalGrand,
-                        'paid_amount' => (float) $totalPaid,
-                        'pending_amount' => (float) ($totalGrand - $totalPaid),
-                        'waybills' => $group->map(function ($wb) {
-                            return [
-                                'gc_number' => $wb->gc_number,
-                                'bill_date' => $wb->bill_date,
-                                'grand_total' => (float) $wb->grand_total,
-                                'amount_paid' => (float) $wb->amount_paid,
-                                'balance' => (float) ($wb->grand_total - $wb->amount_paid)
-                            ];
-                        })->values()
-                    ];
-                })
-                ->values();
+            $waybills = $query->orderBy('bill_date', 'desc')->get();
+
+            $data = $waybills->map(function ($wb) {
+                return [
+                    'gc_number'      => $wb->gc_number,
+                    'bill_date'      => $wb->bill_date,
+                    'consignor_name' => $wb->consignor->name ?? 'Unknown',
+                    'account_type'   => $wb->account_type ?? 'Other',
+                    'destination'    => $wb->destination->city_name ?? '-',
+                    'branch'         => $wb->originBranch->branch_name ?? '-',
+                    'grand_total'    => (float) $wb->grand_total,
+                    'amount_paid'    => (float) $wb->amount_paid,
+                    'balance'        => (float) ($wb->grand_total - $wb->amount_paid),
+                    'status'         => $wb->status,
+                ];
+            })->values();
 
             return response()->json([
                 'success' => true,
-                'data' => $summarized,
+                'data'    => $data,
                 'summary' => [
-                    'total_pending' => (float) $summarized->sum('pending_amount'),
-                    'total_count' => (int) $summarized->sum('count')
+                    'total_pending' => (float) $data->sum('balance'),
+                    'total_count'   => (int) $data->count()
                 ]
             ]);
         } catch (\Exception $e) {

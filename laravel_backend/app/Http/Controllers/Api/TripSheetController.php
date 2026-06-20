@@ -602,25 +602,7 @@ class TripSheetController extends Controller
                 Waybill::where('id', $waybillId)->update(['status' => $newStatus]);
             }
 
-            // --- 3. Post Driver Advance to Cash Book (DEBIT) ---
-            if ($tripSheet->advance_amount > 0) {
-                $advanceHead = AccountHead::firstOrCreate(
-                    ['name' => 'Driver Advance'],
-                    ['transaction_type' => 'DEBIT', 'status' => 'active']
-                );
-                
-                CashBookEntry::create([
-                    'voucher_no' => 'ADV-' . $tripSheet->trip_number . '-' . date('His'),
-                    'transaction_date' => $tripSheet->trip_date,
-                    'transaction_type' => 'DEBIT',
-                    'account_head_id' => $advanceHead->id,
-                    'amount' => $tripSheet->advance_amount,
-                    'branch_id' => $tripSheet->dispatch_branch_id,
-                    'paid_to_receive_from' => $tripSheet->driver?->name ?? 'Driver',
-                    'mode_of_pay' => $tripSheet->mode_of_pay ?? 'CASH',
-                    'remarks' => 'Origin Advance for Trip ' . $tripSheet->trip_number
-                ]);
-            }
+            // --- 3. Removed: Post Driver Advance to Cash Book (DEBIT) as per user request ---
 
             DB::commit();
 
@@ -709,6 +691,14 @@ class TripSheetController extends Controller
                     'success' => false,
                     'message' => 'Trip Sheet not found'
                 ], 404);
+            }
+
+            // 🔒 Verified trip sheets cannot be edited
+            if ($tripSheet->verification_date) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This Trip Sheet has been VERIFIED and is locked. Verified records cannot be modified.'
+                ], 403);
             }
 
 

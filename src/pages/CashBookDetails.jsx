@@ -41,9 +41,11 @@ function CashBookDetails() {
     })
 
     const [searchQuery, setSearchQuery] = useState('')
-    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
+    const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0])
+    const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0])
     const [filterBranch, setFilterBranch] = useState('All Branches')
     const [isClosed, setIsClosed] = useState(false)
+    const [closedDays, setClosedDays] = useState(new Set())
 
     const [notification, setNotification] = useState({ show: false, type: '', message: '' })
 
@@ -90,7 +92,7 @@ function CashBookDetails() {
             fetchEntries()
             checkClosingStatus()
         }
-    }, [filterDate, filterBranch, searchQuery, branches])
+    }, [filterFromDate, filterToDate, filterBranch, searchQuery, branches])
 
     useEffect(() => {
         fetchBranches()
@@ -121,7 +123,8 @@ function CashBookDetails() {
         try {
             setLoading(true)
             const params = {
-                date: filterDate,
+                from_date: filterFromDate,
+                to_date: filterToDate,
                 search: searchQuery
             }
             if (filterBranch && filterBranch !== 'All Branches') {
@@ -143,16 +146,19 @@ function CashBookDetails() {
     const checkClosingStatus = async () => {
         if (!filterBranch || filterBranch === 'All Branches') {
             setIsClosed(false)
+            setClosedDays(new Set())
             return
         }
         try {
             const branchObj = branches.find(b => b.branch_name === filterBranch);
             if (!branchObj) return;
 
-            const response = await fetch(`${API_BASE_URL}/day-book-closings?from_date=${filterDate}&to_date=${filterDate}&branch_id=${branchObj.id}`)
+            const response = await fetch(`${API_BASE_URL}/day-book-closings?from_date=${filterFromDate}&to_date=${filterToDate}&branch_id=${branchObj.id}`)
             const data = await response.json()
             if (data.success) {
-                setIsClosed(data.data.length > 0)
+                const closedDates = new Set(data.data.map(d => d.closing_date))
+                setClosedDays(closedDates)
+                setIsClosed(filterFromDate === filterToDate && closedDates.has(filterFromDate))
             }
         } catch (err) {
             console.error('Error checking closing status:', err)
@@ -160,12 +166,9 @@ function CashBookDetails() {
     }
 
     const handleOpenModal = (typeArg = '', entry = null) => {
-        if (isClosed && !entry) {
-            showNotify('error', 'Cannot add entries for a closed day.')
-            return
-        }
-        if (isClosed && entry) {
-            showNotify('error', 'Cannot edit entries for a closed day.')
+        const entryDate = entry ? entry.transaction_date : new Date().toISOString().split('T')[0];
+        if (closedDays.has(entryDate)) {
+            showNotify('error', entry ? 'Cannot edit entries for a closed day.' : 'Cannot add entries for this closed day.')
             return
         }
         if (entry) {
@@ -198,8 +201,8 @@ function CashBookDetails() {
     }
 
     const handleSaveEntry = async () => {
-        if (isClosed) {
-            showNotify('error', 'Access Denied: DayBook is closed.')
+        if (closedDays.has(currentEntry.transaction_date)) {
+            showNotify('error', 'Access Denied: DayBook is closed for this date.')
             return
         }
         if (!currentEntry.transaction_type || !currentEntry.account_head_id || !currentEntry.amount) {
@@ -254,7 +257,8 @@ function CashBookDetails() {
     }
 
     const handleDelete = async (id) => {
-        if (isClosed) {
+        const entryToDelete = entries.find(e => e.id === id);
+        if (entryToDelete && closedDays.has(entryToDelete.transaction_date)) {
             showNotify('error', 'Cannot delete entries for a closed day.')
             return
         }
@@ -275,6 +279,10 @@ function CashBookDetails() {
     }
 
     const handleOpenCloseModal = async () => {
+        if (filterFromDate !== filterToDate) {
+            showNotify('error', 'Please select a single date (From and To date must be the same) to close the book.')
+            return
+        }
         if (isClosed) {
             showNotify('error', 'DayBook is already closed for this date.')
             return
@@ -302,7 +310,7 @@ function CashBookDetails() {
         const debits = entries.filter(e => e.transaction_type === 'DEBIT').reduce((a, b) => a + Number(b.amount), 0)
 
         setDayBookClose({
-            date: filterDate,
+            date: filterFromDate,
             openingBalance: previousClosingBalance,
             creditAmount: credits,
             debitAmount: debits,
@@ -595,13 +603,25 @@ function CashBookDetails() {
                     </div>
                 </div>
                 <div className="w-full md:w-auto space-y-0.5">
-                    <label className="text-[10px] font-bold text-gray-600 uppercase">Date</label>
+                    <label className="text-[10px] font-bold text-gray-600 uppercase">From Date</label>
                     <div className="relative">
                         <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input
                             type="date"
-                            value={filterDate}
-                            onChange={(e) => setFilterDate(e.target.value)}
+                            value={filterFromDate}
+                            onChange={(e) => setFilterFromDate(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none transition"
+                        />
+                    </div>
+                </div>
+                <div className="w-full md:w-auto space-y-0.5">
+                    <label className="text-[10px] font-bold text-gray-600 uppercase">To Date</label>
+                    <div className="relative">
+                        <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                        <input
+                            type="date"
+                            value={filterToDate}
+                            onChange={(e) => setFilterToDate(e.target.value)}
                             className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none transition"
                         />
                     </div>
@@ -644,7 +664,7 @@ function CashBookDetails() {
                         <h1 className="text-2xl font-black text-[#1e3a8a] uppercase">{companyDetails.name}</h1>
                         <p className="text-xs font-medium text-gray-500">{companyDetails.address}</p>
                         <p className="text-xs font-black text-gray-800 tracking-widest mt-2 border-t border-gray-200 pt-2 uppercase">
-                            Cash Book Report - {filterBranch} ({filterDate})
+                            Cash Book Report - {filterBranch} ({filterFromDate} to {filterToDate})
                         </p>
                     </div>
                 </div>
@@ -671,6 +691,7 @@ function CashBookDetails() {
                                 const balance = entries.slice(0, index + 1).reduce((acc, curr) => {
                                     return curr.transaction_type === 'CREDIT' ? acc + Number(curr.amount) : acc - Number(curr.amount)
                                 }, 0)
+                                const isEntryClosed = isClosed || closedDays.has(entry.transaction_date);
 
                                 return (
                                     <tr key={entry.id} className="hover:bg-blue-50/50 transition border-b border-gray-100">
@@ -693,10 +714,10 @@ function CashBookDetails() {
                                             <div className="flex justify-center gap-2">
                                                 <button
                                                     onClick={() => handleOpenModal(entry.transaction_type, entry)}
-                                                    disabled={isClosed}
-                                                    className={`p-1.5 rounded-lg transition ${isClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-blue-600 hover:bg-blue-100'
+                                                    disabled={isEntryClosed}
+                                                    className={`p-1.5 rounded-lg transition ${isEntryClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-blue-600 hover:bg-blue-100'
                                                         }`}
-                                                    title={isClosed ? "Restricted: DayBook Closed" : "Edit"}
+                                                    title={isEntryClosed ? "Restricted: DayBook Closed" : "Edit"}
                                                 >
                                                     <Edit2 size={16} />
                                                 </button>
@@ -709,10 +730,10 @@ function CashBookDetails() {
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(entry.id)}
-                                                    disabled={isClosed}
-                                                    className={`p-1.5 rounded-lg transition ${isClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-rose-600 hover:bg-rose-100'
+                                                    disabled={isEntryClosed}
+                                                    className={`p-1.5 rounded-lg transition ${isEntryClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-rose-600 hover:bg-rose-100'
                                                         }`}
-                                                    title={isClosed ? "Restricted: DayBook Closed" : "Delete"}
+                                                    title={isEntryClosed ? "Restricted: DayBook Closed" : "Delete"}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>

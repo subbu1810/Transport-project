@@ -164,9 +164,15 @@ function GCModify() {
         setArticles(waybill.articles || [])
 
         if (waybill.status?.toUpperCase() === 'DELIVERED' || waybill.deliver_status?.toUpperCase() === 'DELIVERED') {
-          setIsDelivered(true)
-          setError('CRITICAL: This GC has already been DELIVERED. Modification is strictly prohibited.')
-          setSaveEnabled(false)
+          if (user?.role === 'superadmin') {
+            setIsDelivered(false)
+            setSaveEnabled(true)
+            setSuccess('GC details loaded. Warning: This GC is already DELIVERED.')
+          } else {
+            setIsDelivered(true)
+            setError('CRITICAL: This GC has already been DELIVERED. Modification is strictly prohibited.')
+            setSaveEnabled(false)
+          }
         } else if (user?.role !== 'superadmin' && parseInt(user?.branch_id) !== parseInt(waybill.origin_branch_id)) {
           setIsDelivered(false)
           setError(`ACCESS DENIED: This GC belongs to ${waybill.origin_branch?.branch_name || 'another branch'}. Only Booked (Origin) branch users can modify it.`)
@@ -337,7 +343,8 @@ function GCModify() {
         remarks: formData.remarks,
         articles: articles,
         edit_reason: editReason,
-        admin_id: user?.id
+        admin_id: user?.id,
+        role: user?.role
       }
 
       const response = await fetch(`${API_BASE_URL}/waybills/${waybillId}`, {

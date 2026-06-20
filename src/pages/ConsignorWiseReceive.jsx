@@ -40,6 +40,9 @@ function ConsignorWiseReceive() {
   const [currentUser, setCurrentUser] = useState(null)
   const [consignorSearch, setConsignorSearch] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [overallDiscount, setOverallDiscount] = useState(0)
+  const [receiptSearch, setReceiptSearch] = useState('')
+  const [showReceiptDropdown, setShowReceiptDropdown] = useState(false)
 
   useEffect(() => {
     fetchInitialData()
@@ -221,23 +224,9 @@ function ConsignorWiseReceive() {
       const current = prev[id] || { paid: 0, discount: 0, selected: false }
       let updated = { ...current, [field]: newVal }
 
-      // Smart Adjustment:
-      // If we are editing discount, adjust the paid amount to fit balance
-      if (field === 'discount') {
-        if (updated.discount > balance) {
-          updated.discount = balance;
-          updated.paid = 0;
-        } else if (updated.paid + updated.discount > balance) {
-          updated.paid = Math.max(0, balance - updated.discount);
-        }
-      }
-      // If we are editing paid amount, adjust it if it exceeds balance - current discount
-      else if (field === 'paid') {
+      if (field === 'paid') {
         if (updated.paid > balance) {
-          updated.paid = balance;
-          updated.discount = 0;
-        } else if (updated.paid + updated.discount > balance) {
-          updated.discount = Math.max(0, balance - updated.paid);
+          updated.paid = balance
         }
       }
 
@@ -246,9 +235,9 @@ function ConsignorWiseReceive() {
     })
   }
 
-  const activeSelections = Object.entries(selectedWaybills).filter(([, v]) => v.selected && (v.paid > 0 || v.discount > 0))
+  const activeSelections = Object.entries(selectedWaybills).filter(([, v]) => v.selected && v.paid > 0)
   const totalToReceive = activeSelections.reduce((sum, [, item]) => sum + item.paid, 0)
-  const totalDiscount = activeSelections.reduce((sum, [, item]) => sum + item.discount, 0)
+  const totalDiscount = overallDiscount
 
   const handleSubmit = async () => {
     if (isClosed) {
@@ -256,14 +245,32 @@ function ConsignorWiseReceive() {
       return
     }
     try {
-      const paymentList = activeSelections.map(([id, data]) => ({
-        id: parseInt(id),
-        paid_amount: data.paid,
-        discount: data.discount
-      }))
+      const paymentList = []
+      let remainingDiscount = parseFloat(overallDiscount) || 0;
+
+      activeSelections.forEach(([id, data]) => {
+        const wb = waybills.find(w => w.id === parseInt(id));
+        const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0);
+        
+        const allocatedDiscount = Math.min(data.paid, remainingDiscount);
+        remainingDiscount -= allocatedDiscount;
+        
+        const paidAmount = Math.max(0, data.paid - allocatedDiscount);
+        
+        paymentList.push({
+          id: parseInt(id),
+          paid_amount: paidAmount,
+          discount: allocatedDiscount
+        });
+      });
 
       if (paymentList.length === 0) {
         showNotification('error', 'Select at least one GC or enter an amount')
+        return
+      }
+
+      if (overallDiscount > totalToReceive) {
+        showNotification('error', 'Overall discount cannot exceed the total receiving amount.')
         return
       }
 
@@ -282,18 +289,20 @@ function ConsignorWiseReceive() {
 
       const response = await axios.post(`${API_BASE_URL}/waybills/bulk-receive-payment`, payload)
       if (response.data.success) {
-        const msg = response.data.message || `Bulk payment of ₹${response.data.total_paid.toLocaleString()} processed!`
+        const netPaid = totalToReceive - overallDiscount
+        const msg = response.data.message || `Bulk payment of ₹${netPaid.toLocaleString()} processed!`
         setSuccess(msg)
         showNotification('success', msg)
         setWaybills([])
         setSelectedWaybills({})
+        setOverallDiscount(0)
         // Keep a copy for printing before reset if needed
         const printData = {
           receipt_no: response.data.voucher_no || 'VOU-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
           date: paymentHeader.receivedDate,
           from: paymentHeader.payerName,
-          amount: response.data.total_paid,
-          discount: totalDiscount,
+          amount: netPaid,
+          discount: overallDiscount,
           mode: paymentHeader.modeOfPay,
           refNo: paymentHeader.refNo,
           gcs: paymentList.length,
@@ -506,18 +515,84 @@ function ConsignorWiseReceive() {
               <span className="text-[9px] font-black text-green-600 uppercase tracking-widest ml-1 flex items-center gap-1.5">
                 <Hash size={12} /> Specific Report ID
               </span>
-              <select
-                value={filters.receiptNo}
-                onChange={(e) => setFilters({ ...filters, receiptNo: e.target.value })}
-                className="w-full h-10 px-4 bg-green-50/50 border border-green-200 focus:border-green-500 rounded-xl outline-none font-bold text-slate-700 text-xs transition-all uppercase"
-              >
-                <option value="">-- Or Search By Consignor --</option>
-                {pendingReceipts.map(r => (
-                  <option key={r.id} value={r.receipt_no}>
-                    {r.receipt_no} — {r.consignor?.name}
-                  </option>
-                ))}
-              </select>
+              {/* Searchable Receipt Dropdown */}
+              <div className="relative">
+                <div
+                  className={`flex items-center gap-2 pl-3 pr-2 h-10 border rounded-xl bg-green-50/50 cursor-text transition-all ${
+                    showReceiptDropdown ? 'border-green-500 ring-1 ring-green-200 bg-white' : 'border-green-200 hover:border-green-400'
+                  }`}
+                  onClick={() => setShowReceiptDropdown(true)}
+                >
+                  <Search size={12} className="text-green-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder={filters.receiptNo ? filters.receiptNo : '-- Or Search By Consignor --'}
+                    value={showReceiptDropdown ? receiptSearch : (filters.receiptNo || '')}
+                    onChange={(e) => { setReceiptSearch(e.target.value); setShowReceiptDropdown(true) }}
+                    onFocus={() => { setShowReceiptDropdown(true); setReceiptSearch('') }}
+                    onBlur={() => setTimeout(() => setShowReceiptDropdown(false), 180)}
+                    className="flex-1 outline-none bg-transparent font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium text-xs uppercase min-w-0"
+                  />
+                  {filters.receiptNo && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); setFilters({ ...filters, receiptNo: '' }); setReceiptSearch(''); setWaybills([]) }}
+                      className="text-slate-300 hover:text-red-400 transition-colors shrink-0 font-black text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-slate-400 shrink-0 transition-transform ${showReceiptDropdown ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+
+                {showReceiptDropdown && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border-2 border-green-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                    {receiptsLoading ? (
+                      <div className="px-4 py-3 text-[10px] text-slate-400 font-bold text-center">Loading...</div>
+                    ) : pendingReceipts
+                        .filter(r => {
+                          if (!receiptSearch) return true
+                          const q = receiptSearch.toLowerCase()
+                          return (
+                            (r.receipt_no || '').toLowerCase().includes(q) ||
+                            (r.consignor?.name || '').toLowerCase().includes(q)
+                          )
+                        })
+                        .length === 0 ? (
+                      <div className="px-4 py-3 text-[10px] text-slate-400 font-bold text-center">No records found</div>
+                    ) : (
+                      pendingReceipts
+                        .filter(r => {
+                          if (!receiptSearch) return true
+                          const q = receiptSearch.toLowerCase()
+                          return (
+                            (r.receipt_no || '').toLowerCase().includes(q) ||
+                            (r.consignor?.name || '').toLowerCase().includes(q)
+                          )
+                        })
+                        .map(r => {
+                          const isSelected = filters.receiptNo === r.receipt_no
+                          return (
+                            <div
+                              key={r.id}
+                              onMouseDown={() => {
+                                setFilters({ ...filters, receiptNo: r.receipt_no })
+                                setReceiptSearch('')
+                                setShowReceiptDropdown(false)
+                              }}
+                              className={`px-3 py-2 cursor-pointer text-[10px] font-bold flex flex-col gap-0.5 transition-colors ${
+                                isSelected ? 'bg-green-50 text-green-800' : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <span className="font-black tracking-wide uppercase">{r.receipt_no}</span>
+                              <span className="text-[9px] text-slate-400 font-medium normal-case">{r.consignor?.name}</span>
+                            </div>
+                          )
+                        })
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {!filters.receiptNo && (
@@ -712,120 +787,108 @@ function ConsignorWiseReceive() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {waybills.map((wb) => {
-                const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
-                const isPaid = balance <= 0
-                const sel = selectedWaybills[wb.id] || { paid: 0, discount: 0, selected: false }
-                const isSelected = sel.selected
-
-                return (
-                  <div
-                    key={wb.id}
-                    className={`bg-white rounded-2xl p-3 border-2 shadow-sm transition-all group ${
-                      isPaid
-                        ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
-                        : isSelected
-                          ? 'border-green-400 shadow-green-50 cursor-pointer hover:shadow-md'
-                          : 'border-slate-200 opacity-75 cursor-pointer hover:shadow-md hover:border-green-200'
-                    }`}
-                    onClick={() => !isPaid && toggleSelect(wb.id)}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-start gap-2">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-3 w-12 text-center">
                         <input
                           type="checkbox"
-                          checked={isSelected}
-                          disabled={isPaid}
-                          onChange={() => !isPaid && toggleSelect(wb.id)}
-                          className={`mt-0.5 w-4 h-4 border-slate-300 rounded focus:ring-green-500 ${
-                            isPaid ? 'opacity-30 cursor-not-allowed text-slate-400' : 'text-green-600 bg-slate-100 cursor-pointer'
-                          }`}
+                          checked={waybills.filter(wb => (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0).length > 0 && waybills.filter(wb => (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0).every(wb => selectedWaybills[wb.id]?.selected)}
+                          onChange={() => {
+                            const unpaidWbs = waybills.filter(wb => (parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)) > 0)
+                            if (unpaidWbs.length === 0) {
+                               showNotification('error', 'All GCs are already fully paid!')
+                               return
+                            }
+                            const allSelected = unpaidWbs.every(wb => selectedWaybills[wb.id]?.selected)
+                            setSelectedWaybills(prev => {
+                              const updated = { ...prev }
+                              waybills.forEach(wb => {
+                                if (updated[wb.id]) {
+                                   const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
+                                   if (balance > 0) {
+                                     updated[wb.id] = { ...updated[wb.id], selected: !allSelected }
+                                   }
+                                }
+                              })
+                              return updated
+                            })
+                          }}
+                          className="w-4 h-4 border-slate-300 rounded text-green-600 focus:ring-green-500 cursor-pointer"
                         />
-                        <div>
-                          <div className={`text-xs font-black transition-colors uppercase ${
-                            isPaid ? 'text-slate-400' : isSelected ? 'text-green-700' : 'text-slate-500'
-                          }`}>
-                            {wb.gc_number}
-                          </div>
-                          <div className="flex items-center gap-1 text-[9px] text-slate-600 font-bold mt-0.5">
-                            <Clock size={10} /> {new Date(wb.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {isPaid ? (
-                          <div className="bg-emerald-50 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-lg border border-emerald-200">
-                            ✓ PAID
-                          </div>
-                        ) : (
-                          <div className="bg-green-50 text-green-600 text-[9px] font-black px-2 py-0.5 rounded-lg border border-green-100 flex items-center gap-1">
-                            <MapPin size={8} /> {wb.destination?.city_name}
-                          </div>
-                        )}
-                        {!isPaid && (
-                          <div className="text-[8px] text-slate-600 font-bold flex items-center gap-1">
-                            <MapPin size={8} className={isPaid ? 'hidden' : ''} /> {wb.destination?.city_name}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      </th>
+                      <th className="p-3">GC Number</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Destination</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3 text-right">Billed (₹)</th>
+                      <th className="p-3 text-right">Received (₹)</th>
+                      <th className="p-3 text-right">Balance (₹)</th>
+                      <th className="p-3 w-40 text-center">Receive Amount (₹)</th>
+                      <th className="p-3 w-28 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {waybills.map((wb) => {
+                      const balance = parseFloat(wb.grand_total) - parseFloat(wb.amount_paid || 0)
+                      const isPaid = balance <= 0
+                      const sel = selectedWaybills[wb.id] || { paid: 0, discount: 0, selected: false }
+                      const isSelected = sel.selected
 
-                    <div className="grid grid-cols-2 gap-2 mb-3 bg-slate-50/50 p-2 rounded-xl">
-                      <div>
-                        <p className="text-[8px] font-black text-slate-600 uppercase tracking-tighter">Billed</p>
-                        <p className="text-xs font-bold text-slate-700">₹{parseFloat(wb.grand_total).toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        {isPaid ? (
-                          <>
-                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-tighter">Received</p>
-                            <p className="text-xs font-black text-emerald-700">₹{parseFloat(wb.amount_paid || 0).toLocaleString()}</p>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-[8px] font-black text-rose-600 uppercase tracking-tighter">Balance</p>
-                            <p className="text-xs font-black text-rose-700">₹{balance.toLocaleString()}</p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {!isPaid && isSelected && (
-                      <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-black text-slate-700 min-w-[50px]">Discount</span>
-                          <input
-                            type="number"
-                            value={sel.discount || ''}
-                            onChange={(e) => handleCellChange(wb.id, 'discount', e.target.value)}
-                            className="flex-1 h-7 bg-white border border-slate-200 focus:border-green-400 rounded-lg text-center font-bold text-slate-600 outline-none text-xs"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-black text-green-700 min-w-[50px]">Receive</span>
-                          <input
-                            type="number"
-                            value={sel.paid || ''}
-                            onChange={(e) => handleCellChange(wb.id, 'paid', e.target.value)}
-                            className="flex-1 h-8 bg-green-50/50 border border-green-100 focus:border-green-600 rounded-lg text-center font-black text-green-700 outline-none text-xs shadow-inner"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {!isPaid && !isSelected && (
-                      <div className="text-center text-[9px] text-slate-500 font-bold py-1">Click to select</div>
-                    )}
-
-                    {isPaid && (
-                      <div className="text-center text-[9px] text-emerald-400 font-black py-1 uppercase tracking-widest">Fully Paid</div>
-                    )}
-                  </div>
-                )
-              })}
+                      return (
+                        <tr 
+                          key={wb.id} 
+                          className={`hover:bg-slate-50/50 transition-colors ${
+                            isPaid ? 'bg-slate-50/50 opacity-60' : isSelected ? 'bg-green-50/10' : ''
+                          }`}
+                        >
+                          <td className="p-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isPaid}
+                              onChange={() => !isPaid && toggleSelect(wb.id)}
+                              className="w-4 h-4 border-slate-300 rounded text-green-600 focus:ring-green-500 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                          </td>
+                          <td className="p-3 font-bold text-slate-800">{wb.gc_number}</td>
+                          <td className="p-3 text-slate-500">{new Date(wb.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                          <td className="p-3 text-slate-600">{wb.destination?.city_name || '-'}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              wb.account_type === 'account' ? 'bg-blue-50 text-blue-600' :
+                              wb.account_type === 'topay' ? 'bg-amber-50 text-amber-600' :
+                              'bg-slate-50 text-slate-500'
+                            }`}>{wb.account_type}</span>
+                          </td>
+                          <td className="p-3 text-right text-slate-700">₹{parseFloat(wb.grand_total).toLocaleString()}</td>
+                          <td className="p-3 text-right text-emerald-600">₹{parseFloat(wb.amount_paid || 0).toLocaleString()}</td>
+                          <td className="p-3 text-right text-rose-600 font-bold">₹{balance.toLocaleString()}</td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              value={isSelected && !isPaid ? sel.paid : ''}
+                              disabled={isPaid || !isSelected}
+                              onChange={(e) => handleCellChange(wb.id, 'paid', e.target.value)}
+                              className="w-32 h-8 px-2 bg-white border border-slate-200 focus:border-green-500 rounded-lg text-center font-bold text-slate-700 outline-none text-xs disabled:bg-slate-100 disabled:text-slate-400"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="p-3 text-center">
+                            {isPaid ? (
+                              <span className="inline-block bg-emerald-50 text-emerald-600 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-emerald-200">✓ PAID</span>
+                            ) : (
+                              <span className="inline-block bg-green-50 text-green-600 text-[9px] font-bold px-2 py-0.5 rounded-lg border border-green-100">DELIVERED</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Action Bar - Modern Green Light Style */}
@@ -839,8 +902,18 @@ function ConsignorWiseReceive() {
                     </div>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reductions</p>
-                    <p className="text-slate-600 text-xl font-black italic tracking-tighter">₹{totalDiscount.toLocaleString()}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Overall Discount</p>
+                    <input
+                      type="number"
+                      value={overallDiscount || ''}
+                      onChange={(e) => setOverallDiscount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-28 h-8 bg-green-50/50 border border-green-100 focus:border-green-600 rounded-lg text-center font-black text-green-700 outline-none text-xs shadow-inner"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Net Cash to Receive</p>
+                    <span className="text-emerald-600 text-2xl font-black italic tracking-tighter">₹{(totalToReceive - overallDiscount).toLocaleString()}</span>
                   </div>
                 </div>
 

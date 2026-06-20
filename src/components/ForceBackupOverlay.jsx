@@ -36,9 +36,13 @@ const ForceBackupOverlay = ({ onComplete }) => {
             
             const latestBackup = fetchData.data[0];
 
+            const user = JSON.parse(localStorage.getItem('user'));
+            const userId = user?.id || '';
+            const userName = user?.name || '';
+            
             // Step 3: Trigger download
-            setStep('Starting download...');
-            window.location.href = `${API_BASE_URL}/backups/download?file=${latestBackup.name}`;
+            setStep('Downloading backup file...');
+            window.location.href = `${API_BASE_URL}/backups/download?file=${latestBackup.name}&user_id=${userId}&user_name=${encodeURIComponent(userName)}`;
             
             // Mark as complete and unlock after a short delay to ensure download starts
             setTimeout(() => {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Setting;
+use App\Models\BackupLog;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
@@ -109,6 +110,34 @@ class BackupController extends Controller
         ]);
     }
 
+    public function globalStatus()
+    {
+        // Check if any backup was downloaded in the last 7 days
+        $lastDownload = BackupLog::orderBy('created_at', 'desc')->first();
+        
+        if ($lastDownload && $lastDownload->created_at >= now()->subDays(7)) {
+            return response()->json([
+                'success' => true,
+                'locked' => false,
+                'last_download' => $lastDownload
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'locked' => true
+        ]);
+    }
+
+    public function logs()
+    {
+        $logs = BackupLog::orderBy('created_at', 'desc')->get();
+        return response()->json([
+            'success' => true,
+            'data' => $logs
+        ]);
+    }
+
     public function download(Request $request)
     {
         $fileName = $request->query('file');
@@ -132,6 +161,20 @@ class BackupController extends Controller
 
         if (!$foundPath || !$disk->exists($foundPath)) {
             return response()->json(['success' => false, 'message' => 'Backup file not found'], 404);
+        }
+
+        // Log the download event
+        try {
+            BackupLog::create([
+                'user_id' => $request->query('user_id'),
+                'user_name' => $request->query('user_name'),
+                'file_name' => $fileName,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
+        } catch (\Exception $e) {
+            // Log error silently to not disrupt the download
+            \Log::error('Failed to create BackupLog: ' . $e->getMessage());
         }
 
         return $disk->download($foundPath);

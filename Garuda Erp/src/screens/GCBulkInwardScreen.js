@@ -293,12 +293,9 @@ export default function GCBulkInwardScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  mainContainer: { 
+  safeArea: { 
     flex: 1, 
     backgroundColor: '#f8fafc',
-    width: '100%',
-    maxWidth: 800,
-    alignSelf: 'center'
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   headerTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a', textAlign: 'center' },
@@ -309,7 +306,7 @@ const styles = StyleSheet.create({
   
   filterCard: { backgroundColor: '#ffffff', padding: 15, borderRadius: 16, marginBottom: 15, borderWidth: 1, borderColor: '#e2e8f0', elevation: 1 },
   filterLabel: { fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  pickerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
   pickerIcon: { paddingLeft: 12 },
   picker: { flex: 1, height: 50 },
 

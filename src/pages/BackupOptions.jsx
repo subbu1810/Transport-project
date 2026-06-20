@@ -6,7 +6,9 @@ const BackupOptions = () => {
     const [autoBackup, setAutoBackup] = useState(false);
     const [backupLoading, setBackupLoading] = useState(false);
     const [backups, setBackups] = useState([]);
+    const [logs, setLogs] = useState([]);
     const [fetchingBackups, setFetchingBackups] = useState(false);
+    const [fetchingLogs, setFetchingLogs] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
 
     const fetchBackupStatus = async () => {
@@ -36,9 +38,25 @@ const BackupOptions = () => {
         }
     };
 
+    const fetchLogs = async () => {
+        setFetchingLogs(true);
+        try {
+            const response = await fetch(`${API_BASE_URL}/backups/logs`);
+            const data = await response.json();
+            if (data.success) {
+                setLogs(data.data);
+            }
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+        } finally {
+            setFetchingLogs(false);
+        }
+    };
+
     useEffect(() => {
         fetchBackupStatus();
         fetchBackups();
+        fetchLogs();
     }, []);
 
     const handleAutoBackupToggle = async () => {
@@ -87,7 +105,12 @@ const BackupOptions = () => {
     };
 
     const handleDownloadBackup = (fileName) => {
-        window.location.href = `${API_BASE_URL}/backups/download?file=${fileName}`;
+        const user = JSON.parse(localStorage.getItem('user'));
+        const userId = user?.id || '';
+        const userName = user?.name || '';
+        window.location.href = `${API_BASE_URL}/backups/download?file=${fileName}&user_id=${userId}&user_name=${encodeURIComponent(userName)}`;
+        // refresh logs after a short delay
+        setTimeout(fetchLogs, 3000);
     };
 
     return (
@@ -210,7 +233,48 @@ const BackupOptions = () => {
                                     </table>
                                 )}
                             </div>
+                            {/* Backup Download History */}
+                        <div className="mt-8">
+                            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 flex justify-between items-center">
+                                <span>Download History</span>
+                                <button onClick={fetchLogs} className="text-blue-500 hover:text-blue-700 underline text-[10px]">Refresh Logs</button>
+                            </h3>
+                            
+                            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                                {fetchingLogs ? (
+                                    <div className="p-6 text-center text-gray-400"><Loader2 size={24} className="animate-spin mx-auto text-blue-500" /></div>
+                                ) : logs.length === 0 ? (
+                                    <div className="p-6 text-center text-[10px] font-black uppercase text-gray-400 tracking-widest">No download logs found</div>
+                                ) : (
+                                    <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                                        <table className="w-full text-left text-sm">
+                                            <sticky className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase">Downloaded At</th>
+                                                    <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase">File Name</th>
+                                                    <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase">User</th>
+                                                    <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase">System Info</th>
+                                                </tr>
+                                            </sticky>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {logs.map((log) => (
+                                                    <tr key={log.id} className="hover:bg-gray-50">
+                                                        <td className="px-4 py-3 font-medium text-gray-600 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
+                                                        <td className="px-4 py-3 font-medium text-blue-600 text-xs">{log.file_name}</td>
+                                                        <td className="px-4 py-3 font-medium text-gray-700 text-xs">{log.user_name || `User ID: ${log.user_id}`}</td>
+                                                        <td className="px-4 py-3 text-gray-500 text-[10px] max-w-[200px] truncate" title={log.user_agent}>
+                                                            <div className="font-bold">{log.ip_address}</div>
+                                                            {log.user_agent}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>

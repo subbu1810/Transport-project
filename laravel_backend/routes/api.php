@@ -189,9 +189,11 @@ Route::prefix('v1')->group(function () {
     
     // Backup routes
     Route::get('settings/backup/status', [BackupController::class, 'status']);
+    Route::get('settings/backup/global-status', [BackupController::class, 'globalStatus']);
     Route::post('settings/backup/toggle', [BackupController::class, 'toggle']);
     Route::post('backups/manual', [BackupController::class, 'manual']);
     Route::get('backups', [BackupController::class, 'index']);
+    Route::get('backups/logs', [BackupController::class, 'logs']);
     Route::get('backups/download', [BackupController::class, 'download']);
 
     // Waybill routes

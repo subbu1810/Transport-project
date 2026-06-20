@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Trash2, Printer, Save, RotateCcw, Truck, MapPin, CheckCircle2, XCircle, ChevronDown, Loader2, X, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react'
 import axios from 'axios'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
@@ -26,6 +26,16 @@ function TripSheetEntry() {
   const [gcFilters, setGcFilters] = useState({
     destination: ''
   })
+
+  // Searchable vehicle dropdown state
+  const [vehicleSearch, setVehicleSearch] = useState('')
+  const [showVehicleDropdown, setShowVehicleDropdown] = useState(false)
+  const vehicleDropdownRef = React.useRef(null)
+
+  // Searchable driver dropdown state
+  const [driverSearch, setDriverSearch] = useState('')
+  const [showDriverDropdown, setShowDriverDropdown] = useState(false)
+  const driverDropdownRef = useRef(null)
 
   const [formData, setFormData] = useState({
     vehicle_id: '',
@@ -216,7 +226,8 @@ function TripSheetEntry() {
       if (data.success) {
         const ts = data.data
 
-        setIsLocked(false)
+        // Lock if verified
+        setIsLocked(!!(ts.verification_date))
         setEditingId(ts.id)
         setDispatchBranchId(ts.dispatch_branch_id)
         setFormData({
@@ -618,6 +629,19 @@ function TripSheetEntry() {
           </div>
         )}
 
+        {/* Verified Lock Banner */}
+        {isLocked && (
+          <div className="flex items-center gap-3 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-xl animate-in slide-in-from-top-2 duration-300">
+            <div className="p-1.5 bg-amber-100 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="text-amber-600" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-amber-800 font-black text-xs">Trip Sheet Verified — Editing Locked</p>
+              <p className="text-amber-600 text-[10px] font-medium">This trip sheet has been verified and cannot be modified. Contact a supervisor to unlock if changes are needed.</p>
+            </div>
+          </div>
+        )}
+
         {/* Action Mode & Reference Header */}
         <div className="bg-green-50/50 py-1.5 px-3 rounded-lg border flex items-center gap-3 shadow-sm border-green-200">
           {/* Mode Selector Dropdown */}
@@ -626,11 +650,12 @@ function TripSheetEntry() {
             <div className="relative group">
               <select
                 value={actionType}
+                disabled={isLocked}
                 onChange={(e) => {
                   setActionType(e.target.value)
                   handleReset()
                 }}
-                className="pl-2 pr-6 py-1 bg-white text-green-900 rounded-[5px] border border-green-300 focus:border-green-500 outline-none font-black text-[10px] min-w-[140px] appearance-none hover:border-green-400 transition-all cursor-pointer shadow-sm"
+                className="pl-2 pr-6 py-1 bg-white text-green-900 rounded-[5px] border border-green-300 focus:border-green-500 outline-none font-black text-[10px] min-w-[140px] appearance-none hover:border-green-400 transition-all cursor-pointer shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="NEW">✨ CREATE NEW TRIP</option>
                 <option value="EDIT">📝 MODIFY EXISTING</option>
@@ -685,31 +710,135 @@ function TripSheetEntry() {
 
 
           <div className="grid grid-cols-4 gap-4 mb-4">
-            <div>
+            <div ref={vehicleDropdownRef} className="relative">
               <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">Vehicle No <span className="text-red-500">*</span></label>
-              <select
-                value={formData.vehicle_id}
-                onChange={(e) => handleVehicleChange(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-bold bg-white disabled:bg-gray-100 disabled:text-gray-500 text-xs"
+              <div
+                className={`w-full flex items-center px-3 py-2 border-2 rounded-lg bg-white cursor-text text-xs font-bold gap-2 transition-colors ${
+                  showVehicleDropdown ? 'border-green-500 ring-1 ring-green-200' : 'border-gray-300 hover:border-green-400'
+                }`}
+                onClick={() => setShowVehicleDropdown(true)}
               >
-                <option value="">Select Vehicle</option>
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.vehicle_number}</option>
-                ))}
-              </select>
+                <Search size={13} className="text-gray-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder={formData.vehicle_id ? vehicles.find(v => String(v.id) === String(formData.vehicle_id))?.vehicle_number || 'Select Vehicle' : 'Search vehicle...'}
+                  value={showVehicleDropdown ? vehicleSearch : (vehicles.find(v => String(v.id) === String(formData.vehicle_id))?.vehicle_number || '')}
+                  onChange={(e) => { setVehicleSearch(e.target.value); setShowVehicleDropdown(true) }}
+                  onFocus={() => { setShowVehicleDropdown(true); setVehicleSearch('') }}
+                  onBlur={() => setTimeout(() => setShowVehicleDropdown(false), 180)}
+                  className="flex-1 outline-none bg-transparent font-bold text-gray-800 placeholder:text-gray-400 placeholder:font-medium min-w-0"
+                />
+                {formData.vehicle_id && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleVehicleChange(''); setVehicleSearch('') }}
+                    className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+                <ChevronDown size={13} className={`text-gray-400 shrink-0 transition-transform ${showVehicleDropdown ? 'rotate-180' : ''}`} />
+              </div>
+              {showVehicleDropdown && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border-2 border-green-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                  {vehicles
+                    .filter(v =>
+                      !vehicleSearch ||
+                      v.vehicle_number.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+                      (v.owner_name || '').toLowerCase().includes(vehicleSearch.toLowerCase())
+                    )
+                    .length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-400 font-medium text-center">No vehicles found</div>
+                  ) : (
+                    vehicles
+                      .filter(v =>
+                        !vehicleSearch ||
+                        v.vehicle_number.toLowerCase().includes(vehicleSearch.toLowerCase()) ||
+                        (v.owner_name || '').toLowerCase().includes(vehicleSearch.toLowerCase())
+                      )
+                      .map(v => (
+                        <div
+                          key={v.id}
+                          onMouseDown={() => { handleVehicleChange(String(v.id)); setVehicleSearch(''); setShowVehicleDropdown(false) }}
+                          className={`px-3 py-2 cursor-pointer text-xs font-bold flex items-center justify-between gap-2 transition-colors ${
+                            String(formData.vehicle_id) === String(v.id)
+                              ? 'bg-green-50 text-green-700'
+                              : 'hover:bg-gray-50 text-gray-800'
+                          }`}
+                        >
+                          <span className="font-black tracking-wide">{v.vehicle_number}</span>
+                          {v.owner_name && <span className="text-[10px] text-gray-400 font-medium truncate">{v.owner_name}</span>}
+                          {String(formData.vehicle_id) === String(v.id) && <CheckCircle size={13} className="text-green-500 shrink-0" />}
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
             </div>
-            <div>
+            <div ref={driverDropdownRef} className="relative">
               <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">Driver Name <span className="text-red-500">*</span></label>
-              <select
-                value={formData.driver_id}
-                onChange={(e) => setFormData({ ...formData, driver_id: e.target.value })}
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 outline-none font-bold bg-white disabled:bg-gray-100 disabled:text-gray-500 text-xs"
+              <div
+                className={`w-full flex items-center px-3 py-2 border-2 rounded-lg bg-white cursor-text text-xs font-bold gap-2 transition-colors ${
+                  showDriverDropdown ? 'border-green-500 ring-1 ring-green-200' : 'border-gray-300 hover:border-green-400'
+                }`}
+                onClick={() => setShowDriverDropdown(true)}
               >
-                <option value="">Select Driver</option>
-                {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+                <Search size={13} className="text-gray-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder={formData.driver_id ? drivers.find(d => String(d.id) === String(formData.driver_id))?.name || 'Select Driver' : 'Search driver...'}
+                  value={showDriverDropdown ? driverSearch : (drivers.find(d => String(d.id) === String(formData.driver_id))?.name || '')}
+                  onChange={(e) => { setDriverSearch(e.target.value); setShowDriverDropdown(true) }}
+                  onFocus={() => { setShowDriverDropdown(true); setDriverSearch('') }}
+                  onBlur={() => setTimeout(() => setShowDriverDropdown(false), 180)}
+                  className="flex-1 outline-none bg-transparent font-bold text-gray-800 placeholder:text-gray-400 placeholder:font-medium min-w-0"
+                />
+                {formData.driver_id && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); setFormData({ ...formData, driver_id: '' }); setDriverSearch('') }}
+                    className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+                <ChevronDown size={13} className={`text-gray-400 shrink-0 transition-transform ${showDriverDropdown ? 'rotate-180' : ''}`} />
+              </div>
+              {showDriverDropdown && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border-2 border-green-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                  {drivers
+                    .filter(d =>
+                      !driverSearch ||
+                      d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
+                      (d.mobile_number || d.phone || '').toLowerCase().includes(driverSearch.toLowerCase())
+                    )
+                    .length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-400 font-medium text-center">No drivers found</div>
+                  ) : (
+                    drivers
+                      .filter(d =>
+                        !driverSearch ||
+                        d.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
+                        (d.mobile_number || d.phone || '').toLowerCase().includes(driverSearch.toLowerCase())
+                      )
+                      .map(d => (
+                        <div
+                          key={d.id}
+                          onMouseDown={() => { setFormData({ ...formData, driver_id: String(d.id) }); setDriverSearch(''); setShowDriverDropdown(false) }}
+                          className={`px-3 py-2 cursor-pointer text-xs font-bold flex items-center justify-between gap-2 transition-colors ${
+                            String(formData.driver_id) === String(d.id)
+                              ? 'bg-green-50 text-green-700'
+                              : 'hover:bg-gray-50 text-gray-800'
+                          }`}
+                        >
+                          <span className="font-black tracking-wide">{d.name}</span>
+                          {(d.mobile_number || d.phone) && <span className="text-[10px] text-gray-400 font-medium truncate">{d.mobile_number || d.phone}</span>}
+                          {String(formData.driver_id) === String(d.id) && <CheckCircle size={13} className="text-green-500 shrink-0" />}
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-[10px] font-black text-gray-600 uppercase mb-1">Trip Date <span className="text-red-500">*</span></label>
