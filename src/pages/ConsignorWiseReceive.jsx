@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Search, Loader2, AlertCircle, CheckCircle2, RotateCcw, Filter, FileText, Users, User, Calendar, ArrowRight, Download, IndianRupee, Hash, CreditCard, ClipboardList, Wallet, Receipt, Clock, MapPin, X } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function ConsignorWiseReceive() {
   const [filters, setFilters] = useState({
@@ -324,8 +325,13 @@ function ConsignorWiseReceive() {
 
   const handlePrintVoucher = (data) => {
     const printWindow = window.open('', '_blank');
-    const companyName = transport?.transport_name || 'GARUDA';
-    const logoUrl = transport?.logo_path ? `${STORAGE_URL}/${transport.logo_path}` : '';
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const overrides = applyBranchOverrides(user, {
+        company_name: transport?.transport_name || 'GARUDA',
+        logo_path: transport?.logo_path ? `${STORAGE_URL}/${transport.logo_path}` : ''
+    });
+    const companyName = overrides.company_name;
+    const logoUrl = overrides.logo_path;
 
     printWindow.document.write(`
       <html>

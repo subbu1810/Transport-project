@@ -35,7 +35,7 @@ class AckBundleController extends Controller
                 ->whereNull('ack_bundle_id');
 
             if ($branchId && $branchId !== '' && $branchId !== 'All Branches') {
-                $query->whereNested(function($q) use ($branchId) {
+                $query->where(function($q) use ($branchId) {
                     $q->where('delivered_branch_id', $branchId)
                       ->orWhere('origin_branch_id', $branchId)
                       ->orWhere('inward_branch_id', $branchId);

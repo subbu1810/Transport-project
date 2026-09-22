@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transport ERP - QR Code Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: #f1f5f9; margin: 0; padding: 30px; display: flex; flex-direction: column; align-items: center; }
+    .card { background: white; border-radius: 16px; padding: 28px; width: 100%; max-width: 520px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+    h1 { margin-top: 0; font-size: 22px; color: #0f172a; text-align: center; }
+    p.desc { font-size: 14px; color: #64748b; text-align: center; margin-bottom: 24px; }
+    label { font-size: 13px; font-weight: 700; color: #334155; display: block; margin-bottom: 6px; text-transform: uppercase; }
+    input, select { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 15px; margin-bottom: 16px; outline: none; transition: 0.2s; }
+    input:focus, select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+    button { width: 100%; padding: 14px; background: #2563eb; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #1d4ed8; }
+    .qr-container { margin-top: 28px; text-align: center; display: none; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 14px; padding: 24px; }
+    #qrcode { display: inline-block; padding: 12px; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .qr-title { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 14px; }
+    .qr-sub { font-size: 13px; color: #64748b; margin-top: 4px; word-break: break-all; }
+    .print-btn { background: #0f172a; margin-top: 16px; font-size: 14px; padding: 10px; }
+    .quick-list { display: flex; gap: 8px; margin-bottom: 18px; }
+    .quick-btn { background: #e2e8f0; color: #334155; border: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .quick-btn:hover { background: #cbd5e1; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>📱 Transport QR Generator</h1>
+    <p class="desc">Generate setup QR codes for your 4 transports to scan with the mobile app.</p>
+
+    <div class="quick-list">
+      <button class="quick-btn" onclick="fillPreset('LIFE', 'Life Transport', 'https://api.lifetransport.ssquareg.com/api/v1')">Life Transport</button>
+      <button class="quick-btn" onclick="fillPreset('GARUDA', 'Garuda Transport', 'https://api.garudaerp.ssquareg.com/api/v1')">Garuda</button>
+    </div>
+
+    <label>Transport Short Code</label>
+    <input type="text" id="code" placeholder="e.g. LIFE or GARUDA" value="LIFE">
+
+    <label>Transport Company Name</label>
+    <input type="text" id="name" placeholder="e.g. Life Transport Logistics" value="Life Transport">
+
+    <label>Backend API URL</label>
+    <input type="text" id="url" placeholder="https://api.lifetransport.ssquareg.com/api/v1" value="https://api.lifetransport.ssquareg.com/api/v1">
+
+    <button onclick="generateQR()">Generate QR Code</button>
+
+    <div class="qr-container" id="qrCard">
+      <div id="qrcode"></div>
+      <div class="qr-title" id="qrName"></div>
+      <div class="qr-sub" id="qrUrl"></div>
+      <button class="print-btn" onclick="window.print()">🖨️ Print QR Code</button>
+    </div>
+  </div>
+
+  <script>
+    let qr = null;
+
+    function fillPreset(code, name, url) {
+      document.getElementById('code').value = code;
+      document.getElementById('name').value = name;
+      document.getElementById('url').value = url;
+      generateQR();
+    }
+
+    function generateQR() {
+      const code = document.getElementById('code').value.trim();
+      const name = document.getElementById('name').value.trim();
+      const url = document.getElementById('url').value.trim();
+
+      if (!url) {
+        alert('Please enter an API URL');
+        return;
+      }
+
+      const payload = JSON.stringify({
+        code: code || 'CUSTOM',
+        name: name || 'Transport Partner',
+        apiUrl: url
+      });
+
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+
+      qr = new QRCode(qrContainer, {
+        text: payload,
+        width: 220,
+        height: 220,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      document.getElementById('qrName').innerText = name || code;
+      document.getElementById('qrUrl').innerText = url;
+      document.getElementById('qrCard').style.display = 'block';
+    }
+
+    // Auto generate on load
+    window.onload = generateQR;
+  </script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import {
 import * as XLSX from 'xlsx'
 import axios from 'axios'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function TripSheetTallyReport() {
   const [filters, setFilters] = useState({
@@ -53,11 +54,17 @@ function TripSheetTallyReport() {
       if (response.data.success) {
         const s = response.data.data;
         const userData = JSON.parse(localStorage.getItem('user')) || {};
-        setSettings({
+        const overrides = applyBranchOverrides(userData, {
           company_name: userData.transport_name || s.company_name || s.transport_name || 'Transport Logistics',
           address: userData.transport_address || s.address || s.transport_address || '',
           phone: userData.transport_phone || s.phone || s.transport_phone || '',
           logo_path: userData.transport_logo_url || s.logo_path || ''
+        });
+        setSettings({
+          company_name: overrides.company_name,
+          address: overrides.address,
+          phone: overrides.phone,
+          logo_path: overrides.logo_path || overrides.logo
         });
       }
     } catch (err) { console.error('Settings err:', err); }

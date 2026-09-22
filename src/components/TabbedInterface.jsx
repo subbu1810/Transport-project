@@ -97,6 +97,7 @@ import RouteAnalytics from '../pages/RouteAnalytics'
 import TechnicalSupport from '../pages/TechnicalSupport'
 import MaintenanceBilling from '../pages/MaintenanceBilling'
 import BackupOptions from '../pages/BackupOptions'
+import MobileAppQR from '../pages/MobileAppQR'
 import UploadPod from '../pages/UploadPod'
 import PendingPodReport from '../pages/PendingPodReport'
 
@@ -231,7 +232,8 @@ function TabbedInterface() {
     'route-analytics': <RouteAnalytics />,
     'technical-support': <TechnicalSupport />,
     'maintenance-billing': <MaintenanceBilling />,
-    'backup-options': <BackupOptions />
+    'backup-options': <BackupOptions />,
+    'mobile-app-qr': <MobileAppQR />
   }
 
   return (

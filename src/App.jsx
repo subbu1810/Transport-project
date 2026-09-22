@@ -29,6 +29,7 @@ import RouteTripSheetEntry from './pages/RouteTripSheetEntry'
 import MaintenanceBilling from './pages/MaintenanceBilling'
 import MaintenanceAlert from './components/MaintenanceAlert'
 import BackupOptions from './pages/BackupOptions'
+import MobileAppQR from './pages/MobileAppQR'
 import ForceBackupOverlay from './components/ForceBackupOverlay'
 function App() {
   const [showSplash, setShowSplash] = useState(true)
@@ -212,6 +213,7 @@ function App() {
                     <Route path="/route-trip-entry" element={<RouteTripSheetEntry />} />
                     <Route path="/maintenance-billing" element={<MaintenanceBilling />} />
                     <Route path="/backup-options" element={<BackupOptions />} />
+                    <Route path="/mobile-app-qr" element={<MobileAppQR />} />
                     {/* Simplified route handling for tab system */}
                     <Route path="*" element={<TabbedInterface />} />
                   </Routes>

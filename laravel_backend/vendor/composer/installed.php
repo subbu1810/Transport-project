@@ -3,7 +3,7 @@
         'name' => 'transport/management-system',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'c386f32c950ed1c447018c33f3a0cb6b4bffc618',
+        'reference' => '5738f3f8f1bc7327fc5a7f7dd5b086ffba8359ff',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -360,6 +360,24 @@
             'replaced' => array(
                 0 => 'v11.47.0',
             ),
+        ),
+        'intervention/gif' => array(
+            'pretty_version' => '4.2.4',
+            'version' => '4.2.4.0',
+            'reference' => 'c3598a16ebe7690cd55640c44144a9df383ea73c',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../intervention/gif',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'intervention/image' => array(
+            'pretty_version' => '3.11.8',
+            'version' => '3.11.8.0',
+            'reference' => 'cf04c8dd245697f701057c13d4bfe140d584e738',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../intervention/image',
+            'aliases' => array(),
+            'dev_requirement' => false,
         ),
         'kodova/hamcrest-php' => array(
             'dev_requirement' => true,
@@ -1304,7 +1322,7 @@
         'transport/management-system' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'c386f32c950ed1c447018c33f3a0cb6b4bffc618',
+            'reference' => '5738f3f8f1bc7327fc5a7f7dd5b086ffba8359ff',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

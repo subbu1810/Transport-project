@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend
 } from 'recharts'
 import axios from 'axios'
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b']
 
@@ -97,6 +98,9 @@ function BalanceSheet() {
     link.click()
   }
 
+  const currentUser = JSON.parse(localStorage.getItem('user')) || {};
+  const overrides = applyBranchOverrides(currentUser, { company_name: 'GARUDA' });
+
   return (
     <div id="balance-sheet-audit" className="bg-[#f8fafc] min-h-screen font-sans text-slate-900 border-l border-slate-200">
       
@@ -130,7 +134,7 @@ function BalanceSheet() {
          <div className="print-header-block mb-10 border-b-4 border-slate-950 pb-8 hidden-screen">
             <div className="flex-print-row">
                <div className="main-logo-section">
-                  <h1 className="audit-logo-txt">GARUDA<br/>ENTERPRISE LOGS.</h1>
+                  <h1 className="audit-logo-txt">{overrides.company_name}<br/>ENTERPRISE LOGS.</h1>
                   <p className="audit-subtext">Net Asset & Receivables Tracking Matrix</p>
                </div>
                <div className="audit-details-section">

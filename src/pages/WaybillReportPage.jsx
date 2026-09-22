@@ -6,7 +6,8 @@ function WaybillReportPage() {
   const [filters, setFilters] = useState({
     fromDate: new Date().toISOString().split('T')[0],
     toDate: new Date().toISOString().split('T')[0],
-    status: ''
+    status: '',
+    account_type: ''
   })
 
   const [waybills, setWaybills] = useState([])
@@ -14,7 +15,7 @@ function WaybillReportPage() {
   const [error, setError] = useState('')
   const [branches, setBranches] = useState([])
   const [columnSearch, setColumnSearch] = useState({
-    date: '', gcNum: '', origin: '', destination: '', consignor: '', consignee: '', qty: '', weight: '', amount: '', status: ''
+    date: '', gcNum: '', origin: '', destination: '', consignor: '', consignee: '', qty: '', weight: '', amount: '', status: '', account_type: ''
   })
 
   useEffect(() => {
@@ -59,6 +60,7 @@ function WaybillReportPage() {
       if (filters.fromDate) queryParams.append('from_date', filters.fromDate)
       if (filters.toDate) queryParams.append('to_date', filters.toDate)
       if (filters.status) queryParams.append('status', filters.status)
+      if (filters.account_type) queryParams.append('account_type', filters.account_type)
       if (filters.branch_id) queryParams.append('branch_id', filters.branch_id)
 
       const response = await fetch(`${API_BASE_URL}/waybills?${queryParams.toString()}`)
@@ -128,9 +130,10 @@ function WaybillReportPage() {
     const sQty = !columnSearch.qty || (wb.total_articles || '').toString().includes(columnSearch.qty);
     const sWeight = !columnSearch.weight || (wb.actual_weight || '').toString().includes(columnSearch.weight);
     const sAmount = !columnSearch.amount || (wb.grand_total || '').toString().includes(columnSearch.amount);
+    const sAccountType = !columnSearch.account_type || (wb.account_type || '').toLowerCase().includes(columnSearch.account_type.toLowerCase());
     const sStatus = !columnSearch.status || (wb.status || 'PENDING').toLowerCase().includes(columnSearch.status.toLowerCase());
 
-    return sDate && sGcNum && sOrigin && sDest && sConsignor && sConsignee && sQty && sWeight && sAmount && sStatus;
+    return sDate && sGcNum && sOrigin && sDest && sConsignor && sConsignee && sQty && sWeight && sAmount && sAccountType && sStatus;
   });
 
   return (
@@ -149,7 +152,7 @@ function WaybillReportPage() {
           </div>
 
           <div className="flex-1 min-w-[300px]">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 items-end">
+            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-6 gap-3 items-end">
               <div className="space-y-1">
                 <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider ml-0.5">From</label>
                 <div className="relative">
@@ -216,7 +219,24 @@ function WaybillReportPage() {
                   </select>
                 </div>
               </div>
-              <div className="md:col-span-4 lg:col-span-1">
+              <div className="space-y-1">
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider ml-0.5">Account Type</label>
+                <div className="relative">
+                  <Database className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                  <select
+                    value={filters.account_type}
+                    onChange={(e) => setFilters({ ...filters, account_type: e.target.value })}
+                    className="w-full pl-8 pr-2 py-1.5 bg-gray-50 border-2 border-gray-100 rounded-lg focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-xs font-bold appearance-none"
+                  >
+                    <option value="">All Types</option>
+                    <option value="PAID">PAID</option>
+                    <option value="TOPAY">TOPAY</option>
+                    <option value="ACCOUNT">ACCOUNT</option>
+                    <option value="TBB">TBB</option>
+                  </select>
+                </div>
+              </div>
+              <div className="md:col-span-5 lg:col-span-1">
                 <button
                   onClick={handleGetDetails}
                   disabled={loading}
@@ -252,34 +272,36 @@ function WaybillReportPage() {
             <table className="w-full text-[10px] border-collapse">
               <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
                 <tr>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Date</th>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">GC Num</th>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Origin</th>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Destination</th>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Consignor</th>
-                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Consignee</th>
-                  <th className="px-3 py-2 text-center font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Qty</th>
-                  <th className="px-3 py-2 text-right font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Weight</th>
-                  <th className="px-3 py-2 text-right font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Amount</th>
-                  <th className="px-3 py-2 text-center font-black text-gray-900 uppercase tracking-wider border-b border-gray-200">Status</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">Date</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">GC Num</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">Origin</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">Destination</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">Consignor</th>
+                  <th className="px-3 py-2 text-left font-black text-gray-900 uppercase tracking-wider border border-gray-200">Consignee</th>
+                  <th className="px-3 py-2 text-center font-black text-gray-900 uppercase tracking-wider border border-gray-200">Qty</th>
+                  <th className="px-3 py-2 text-right font-black text-gray-900 uppercase tracking-wider border border-gray-200">Weight</th>
+                  <th className="px-3 py-2 text-right font-black text-gray-900 uppercase tracking-wider border border-gray-200">Amount</th>
+                  <th className="px-3 py-2 text-center font-black text-gray-900 uppercase tracking-wider border border-gray-200">Acct Type</th>
+                  <th className="px-3 py-2 text-center font-black text-gray-900 uppercase tracking-wider border border-gray-200">Status</th>
                 </tr>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.date} onChange={e => setColumnSearch({...columnSearch, date: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.gcNum} onChange={e => setColumnSearch({...columnSearch, gcNum: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.origin} onChange={e => setColumnSearch({...columnSearch, origin: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.destination} onChange={e => setColumnSearch({...columnSearch, destination: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.consignor} onChange={e => setColumnSearch({...columnSearch, consignor: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.consignee} onChange={e => setColumnSearch({...columnSearch, consignee: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-center" value={columnSearch.qty} onChange={e => setColumnSearch({...columnSearch, qty: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-right" value={columnSearch.weight} onChange={e => setColumnSearch({...columnSearch, weight: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-right" value={columnSearch.amount} onChange={e => setColumnSearch({...columnSearch, amount: e.target.value})} /></th>
-                  <th className="px-1 py-1"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-center" value={columnSearch.status} onChange={e => setColumnSearch({...columnSearch, status: e.target.value})} /></th>
+                <tr className="bg-gray-50 border border-gray-200">
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.date} onChange={e => setColumnSearch({...columnSearch, date: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.gcNum} onChange={e => setColumnSearch({...columnSearch, gcNum: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.origin} onChange={e => setColumnSearch({...columnSearch, origin: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.destination} onChange={e => setColumnSearch({...columnSearch, destination: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.consignor} onChange={e => setColumnSearch({...columnSearch, consignor: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500" value={columnSearch.consignee} onChange={e => setColumnSearch({...columnSearch, consignee: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-center" value={columnSearch.qty} onChange={e => setColumnSearch({...columnSearch, qty: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-right" value={columnSearch.weight} onChange={e => setColumnSearch({...columnSearch, weight: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-right" value={columnSearch.amount} onChange={e => setColumnSearch({...columnSearch, amount: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-center" value={columnSearch.account_type} onChange={e => setColumnSearch({...columnSearch, account_type: e.target.value})} /></th>
+                  <th className="px-1 py-1 border border-gray-200"><input type="text" placeholder="Search..." className="w-full text-[10px] p-1 border border-gray-300 rounded font-normal text-gray-800 focus:outline-none focus:border-blue-500 text-center" value={columnSearch.status} onChange={e => setColumnSearch({...columnSearch, status: e.target.value})} /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredWaybills.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="px-3 py-20 text-center text-gray-400 font-medium bg-white">
+                    <td colSpan="11" className="px-3 py-20 text-center text-gray-400 font-medium bg-white">
                       {loading ? (
                         <div className="flex flex-col items-center gap-2">
                           <Loader2 size={24} className="animate-spin text-blue-500" />
@@ -291,16 +313,21 @@ function WaybillReportPage() {
                 ) : (
                   filteredWaybills.map((wb, idx) => (
                     <tr key={idx} className="hover:bg-blue-50/30 transition-colors group">
-                      <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{wb.bill_date ? new Date(wb.bill_date).toLocaleDateString('en-GB') : '-'}</td>
-                      <td className="px-3 py-2 font-black text-blue-600">{wb.gc_number}</td>
-                      <td className="px-3 py-2 text-gray-600 font-bold whitespace-nowrap">{wb.origin_branch?.branch_name || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 font-bold whitespace-nowrap">{wb.destination?.city_name || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 font-medium truncate max-w-[100px]">{wb.consignor?.name || '-'}</td>
-                      <td className="px-3 py-2 text-gray-600 font-medium truncate max-w-[100px]">{wb.consignee?.name || '-'}</td>
-                      <td className="px-3 py-2 text-center font-black">{wb.total_articles}</td>
-                      <td className="px-3 py-2 text-right text-gray-500">{wb.actual_weight || 0}k</td>
-                      <td className="px-3 py-2 text-right font-black text-gray-900">₹{parseFloat(wb.grand_total || 0).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2 border border-gray-200 text-gray-500 whitespace-nowrap">{wb.bill_date ? new Date(wb.bill_date).toLocaleDateString('en-GB') : '-'}</td>
+                      <td className="px-3 py-2 border border-gray-200 font-black text-blue-600">{wb.gc_number}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-gray-600 font-bold whitespace-nowrap">{wb.origin_branch?.branch_name || '-'}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-gray-600 font-bold whitespace-nowrap">{wb.destination?.city_name || '-'}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-gray-600 font-medium truncate max-w-[100px]">{wb.consignor?.name || '-'}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-gray-600 font-medium truncate max-w-[100px]">{wb.consignee?.name || '-'}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-center font-black">{wb.total_articles}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-right text-gray-500">{wb.actual_weight || 0}k</td>
+                      <td className="px-3 py-2 border border-gray-200 text-right font-black text-gray-900">₹{parseFloat(wb.grand_total || 0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 border border-gray-200 text-center text-xs font-bold whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full ${wb.account_type?.toLowerCase() === 'topay' ? 'bg-red-100 text-red-700' : wb.account_type?.toLowerCase() === 'paid' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>
+                          {wb.account_type || '-'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 border border-gray-200 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest ${wb.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
                           wb.status === 'RECEIVED' ? 'bg-blue-100 text-blue-700' :
                             wb.status === 'DISPATCHED' ? 'bg-yellow-100 text-yellow-700' :
@@ -313,6 +340,17 @@ function WaybillReportPage() {
                   ))
                 )}
               </tbody>
+              {filteredWaybills.length > 0 && (
+                <tfoot>
+                  <tr className="bg-gray-100 border-t-2 border-gray-300">
+                    <td colSpan="6" className="px-3 py-2 border border-gray-300 text-right font-black text-gray-700 uppercase tracking-widest text-[10px]">Total</td>
+                    <td className="px-3 py-2 border border-gray-300 text-center font-black text-gray-900">{filteredWaybills.reduce((s, wb) => s + (parseInt(wb.total_articles) || 0), 0)}</td>
+                    <td className="px-3 py-2 border border-gray-300 text-right font-black text-gray-900">{filteredWaybills.reduce((s, wb) => s + (parseFloat(wb.actual_weight) || 0), 0)}k</td>
+                    <td className="px-3 py-2 border border-gray-300 text-right font-black text-gray-900">₹{filteredWaybills.reduce((s, wb) => s + (parseFloat(wb.grand_total) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td colSpan="2" className="px-3 py-2 border border-gray-300"></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { X, Printer, Loader2, CheckCircle, AlertCircle, HelpCircle, FileText } from 'lucide-react'
 import GCEntryReceipt from '../components/GCEntryReceipt'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 
 
@@ -82,7 +83,7 @@ function GCEntry() {
     setCurrentUser(user)
 
     if (user) {
-      setCompanyDetails({
+      setCompanyDetails(applyBranchOverrides(user, {
         company_name: user.transport_name || user.branch?.branch_name || 'Transport Logistics',
         address: user.transport_address || user.branch?.branch_address || '',
         phone: user.transport_phone || user.branch?.branch_phone || '',
@@ -92,7 +93,7 @@ function GCEntry() {
         gstin: user.transport_gstin || user.gstin || user.gst_number || '',
         logo_path: user.transport_logo_url || null,
         upi_qr_path: user.upi_qr_url || null
-      })
+      }))
     }
 
     const loadData = async () => {
@@ -138,7 +139,7 @@ function GCEntry() {
           }
 
           // Assign Global Settings into Company details
-          setCompanyDetails(prev => ({
+          setCompanyDetails(prev => applyBranchOverrides(user || JSON.parse(localStorage.getItem('user') || '{}'), {
             ...prev,
             logo_path: prev?.logo_path || settings.logo_path,
             upi_id: settings.upi_id,

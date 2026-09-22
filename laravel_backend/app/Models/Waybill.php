@@ -139,6 +139,11 @@ class Waybill extends Model
         return $this->belongsToMany(TripSheet::class, 'trip_sheet_details', 'waybill_id', 'trip_sheet_id');
     }
 
+    public function transits()
+    {
+        return $this->hasMany(WaybillTransit::class)->orderBy('created_at', 'asc');
+    }
+
     public function payments()
     {
         return $this->hasMany(WaybillPayment::class);

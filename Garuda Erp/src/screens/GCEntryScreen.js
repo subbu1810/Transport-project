@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../services/api';
 import { Ionicons } from '@expo/vector-icons';
+import { getErrorMessage } from '../utils/errorHandler';
 
 // Custom Searchable Dropdown Component
 const CustomSelect = ({ label, value, options, onSelect, placeholder, disabled }) => {
@@ -195,7 +196,7 @@ export default function GCEntryScreen({ navigation }) {
           setRates(rts || []);
         }
       } catch (err) {
-        Alert.alert('Error', 'Failed to fetch master data from server');
+        Alert.alert('Error', getErrorMessage(err, 'Failed to fetch master data from server'));
       } finally {
         setLoading(false);
       }
@@ -333,7 +334,7 @@ export default function GCEntryScreen({ navigation }) {
         Alert.alert('Error', response.data.message || 'Failed to save GC');
       }
     } catch (error) {
-      Alert.alert('Error', 'Server Error saving GC');
+      Alert.alert('Error', getErrorMessage(error, 'Server Error saving GC'));
     } finally {
       setSaving(false);
     }

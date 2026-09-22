@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Search, Printer, FileText, X } from 'lucide-react'
 import GCPrintReceipt from '../components/GCPrintReceipt'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 
 
@@ -30,7 +31,7 @@ function GCPrint() {
                 setCurrentUser(user)
 
                 // Initial set from user data
-                setCompanyDetails({
+                setCompanyDetails(applyBranchOverrides(user, {
                     company_name: user.transport_name || user.branch?.branch_name || 'Transport Logistics',
                     address: user.transport_address || user.branch?.branch_address || '',
                     phone: user.transport_phone || user.branch?.branch_phone || '',
@@ -39,7 +40,7 @@ function GCPrint() {
                     gstin: user.transport_gstin || user.gstin || user.gst_number || '',
                     logo_path: user.transport_logo_url || null,
                     upi_qr_path: user.upi_qr_url || null
-                })
+                }))
 
                 fetchLogo()
                 fetchBranches()
@@ -84,7 +85,7 @@ function GCPrint() {
             const globalQR = getVal(3);
             const globalGST = getVal(4);
 
-            setCompanyDetails(prev => ({
+            setCompanyDetails(prev => applyBranchOverrides(currentUser || JSON.parse(localStorage.getItem('user') || '{}'), {
                 ...prev,
                 logo_path: prev.logo_path || globalLogo,
                 upi_qr_path: prev.upi_qr_path || globalQR,

@@ -166,10 +166,11 @@ function InwardReport() {
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                 className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border-2 border-gray-100 rounded-lg focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-[11px] font-black appearance-none cursor-pointer shadow-inner"
               >
-                <option value="All">All Transactions</option>
-                <option value="INWARDED">Inwarded (Stock)</option>
-                <option value="LOCAL_TRIP">Out for Delivery</option>
-                <option value="DELIVERED">Delivered History</option>
+                <option value="All">All Inwarded GCs (Any Status)</option>
+                <option value="INWARDED">Currently In Stock (Inwarded)</option>
+                <option value="RECEIVED">Received at Branch</option>
+                <option value="LOCAL_TRIP">Out for Delivery (Local Trip)</option>
+                <option value="DELIVERED">Delivered (Completed)</option>
               </select>
               <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 rotate-90" size={12} />
             </div>

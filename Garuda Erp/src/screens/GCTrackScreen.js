@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { API_URL } from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 const STORAGE_URL = API_URL.replace('/api/v1', '/storage');
 
@@ -57,7 +58,7 @@ export default function GCTrackScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'Failed to fetch tracking details. Please try again.');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to fetch tracking details. Please try again.'));
     } finally {
       setLoading(false);
     }

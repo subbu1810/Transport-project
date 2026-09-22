@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Share, Alert } from 'react-native';
 
 export default function MoreScreen({ navigation }) {
   const moreItems = [
@@ -7,7 +7,31 @@ export default function MoreScreen({ navigation }) {
     { id: 'TripSheetReport', title: 'Tripsheet Report', icon: '📑' },
     { id: 'InwardReport', title: 'Inward Report', icon: '📋' },
     { id: 'UploadPOD', title: 'Upload POD', icon: '📸' },
+    { id: 'SwitchCompany', title: 'Switch Transport / Company', icon: '🏢' },
+    { id: 'ShareApp', title: 'Share App', icon: '🔗' },
   ];
+
+
+  const handleShareApp = async () => {
+    try {
+      const result = await Share.share({
+        message: 'Check out Garuda ERP App! Download it now to manage your transport logistics efficiently.',
+        title: 'Share Garuda ERP',
+        // url: 'https://play.google.com/store/apps/details?id=com.subbu1810.mobile_app', // Uncomment if you have a Play Store link
+      });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // shared with activity type of result.activityType
+        } else {
+          // shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // dismissed
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -20,16 +44,15 @@ export default function MoreScreen({ navigation }) {
             key={index}
             style={styles.listItem}
             onPress={() => {
-              if (item.id) {
+              if (item.id === 'SwitchCompany') {
+                navigation.navigate('CompanySetup', { canCancel: true });
+              } else if (item.id === 'ShareApp') {
+                handleShareApp();
+              } else if (item.id) {
                 navigation.navigate(item.id);
-              } else if (item.title === 'GC Report') {
-                navigation.navigate('GCReport');
-              } else if (item.title === 'Inward Report') {
-                navigation.navigate('InwardReport');
-              } else if (item.title === 'Tripsheet Report') {
-                navigation.navigate('TripSheetReport');
               }
             }}
+
           >
             <Text style={styles.listIcon}>{item.icon}</Text>
             <Text style={styles.listText}>{item.title}</Text>

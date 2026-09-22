@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function GCBulkInwardScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -49,7 +50,7 @@ export default function GCBulkInwardScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Failed to load initial data', error);
-      Alert.alert('Error', 'Failed to load branches.');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to load branches.'));
     }
   };
 
@@ -77,7 +78,7 @@ export default function GCBulkInwardScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'Failed to fetch waybills.');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to fetch waybills.'));
       setWaybills([]);
     } finally {
       setLoading(false);
@@ -133,7 +134,7 @@ export default function GCBulkInwardScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'An error occurred while submitting.');
+      Alert.alert('Error', getErrorMessage(error, 'An error occurred while submitting.'));
     } finally {
       setSubmitting(false);
     }

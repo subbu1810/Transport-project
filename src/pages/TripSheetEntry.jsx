@@ -3,6 +3,7 @@ import { Search, Plus, Trash2, Printer, Save, RotateCcw, Truck, MapPin, CheckCir
 import axios from 'axios'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
 import TripSheetReceipt from '../components/TripSheetReceipt'
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 function TripSheetEntry() {
   const [actionType, setActionType] = useState('NEW')
@@ -86,16 +87,19 @@ function TripSheetEntry() {
       const userDataStr = localStorage.getItem('user');
       if (userDataStr) {
         const user = JSON.parse(userDataStr);
-        // Robust transport details mapping from session
-        const tName = user.transport_name || (user.transport && user.transport.name) || 'SANVI TRANSPORT';
-        const tAddr = user.transport_address || (user.transport && user.transport.address) || '';
-        const tPhone = user.transport_phone || user.transport_mobile || (user.transport && user.transport.phone) || '';
-        const tGst = user.transport_gstin || user.gstin || user.gst_number || (user.transport && (user.transport.gst_number || user.transport.gstin || user.transport.gst)) || '';
         
-        setTransportInfo({ name: tName, address: tAddr, phone: tPhone, gstin: tGst });
+        const details = applyBranchOverrides(user, {
+            company_name: user.transport_name || (user.transport && user.transport.name) || 'SANVI TRANSPORT',
+            address: user.transport_address || (user.transport && user.transport.address) || '',
+            phone: user.transport_phone || user.transport_mobile || (user.transport && user.transport.phone) || '',
+            gstin: user.transport_gstin || user.gstin || user.gst_number || (user.transport && (user.transport.gst_number || user.transport.gstin || user.transport.gst)) || '',
+            logo_path: user.transport_logo_url || user.transport_logo_path || user.logo_url || user.logo_path || user.logo || (user.transport && (user.transport.logo || user.transport.logo_path))
+        });
+        
+        setTransportInfo({ name: details.company_name, address: details.address, phone: details.phone, gstin: details.gstin });
 
         // Logo handling from session
-        const transportLogo = user.transport_logo_url || user.transport_logo_path || user.logo_url || user.logo_path || user.logo || (user.transport && (user.transport.logo || user.transport.logo_path));
+        const transportLogo = details.logo_path;
         if (transportLogo) {
           setLogo(transportLogo.startsWith('http') ? transportLogo : `${STORAGE_URL}/${transportLogo.replace(/^\/+/, '')}`);
           return;
@@ -1201,7 +1205,7 @@ function TripSheetEntry() {
       {/* ── Full Page Print Preview Modal ── */}
       {showPreview && printData && (
         <div className="fixed inset-0 z-[1000] flex flex-col bg-white animate-in fade-in zoom-in duration-300 no-print">
-          {/* Modal Header */}
+          {/* Modal Header - Fixed at top */}
           <div className="p-4 border-b flex justify-between items-center bg-gray-50 no-print">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 text-green-700 rounded-lg">
@@ -1223,7 +1227,7 @@ function TripSheetEntry() {
             </button>
           </div>
 
-          {/* Receipt Preview */}
+          {/* Receipt Preview - Scrollable area */}
           <div className="flex-1 overflow-auto bg-gray-200/50 p-4 md:p-8 flex justify-center" id="printable-tripsheet-entry">
             <div className="bg-white shadow-2xl p-[5mm] md:p-[10mm] min-w-fit h-fit">
               <TripSheetReceipt
@@ -1234,7 +1238,7 @@ function TripSheetEntry() {
             </div>
           </div>
 
-          {/* Modal Footer */}
+          {/* Modal Footer with Actions - Fixed at bottom */}
           <div className="p-6 border-t bg-white flex justify-center items-center gap-6 no-print shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
             <button
               onClick={() => {
@@ -1256,8 +1260,8 @@ function TripSheetEntry() {
         </div>
       )}
 
-      {/* Hidden printable content */}
-      <div className="printable-content hidden print:block">
+      {/* Hidden printable content used purely for window.print() */}
+      <div className="printable-content hidden print:block" id="printable-area-hidden">
           <TripSheetReceipt
             printData={printData}
             transportInfo={transportInfo}

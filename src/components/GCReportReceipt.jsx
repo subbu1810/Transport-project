@@ -49,6 +49,9 @@ const GCReportReceipt = ({ waybill, companyDetails, branches = [], currentUser, 
     const thCls = `border border-black px-1 py-0 text-[10px] font-bold text-center bg-gray-50/10`;
 
     const colWidths = ['10%', '26%', '15%', '9%', '9%', '18%', '13%'];
+    const isSindhnur = waybill.origin_branch?.branch_name?.toUpperCase() === 'SINDHNUR' || 
+                       waybill.origin_branch?.branch_name?.toUpperCase() === 'SINDHANUR' || 
+                       (companyDetails?.company_name || companyDetails?.name || '').toUpperCase().includes('LIFE ROAD');
 
     return (
         <div className="receipt-container" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -88,7 +91,7 @@ const GCReportReceipt = ({ waybill, companyDetails, branches = [], currentUser, 
                             </div>
 
                             <div className="text-center flex-1 mx-2 flex flex-col justify-center text-black">
-                                <h1 className="text-[20px] font-black uppercase leading-tight tracking-tighter">
+                                <h1 className="font-black uppercase leading-tight tracking-tighter" style={{ fontSize: isSindhnur ? '28px' : '20px' }}>
                                     {companyDetails?.company_name || companyDetails?.name || ''}
                                 </h1>
                                 <p className="text-[8.5px] font-black leading-tight mt-0.5">

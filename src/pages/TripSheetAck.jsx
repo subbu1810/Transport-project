@@ -6,6 +6,7 @@ import {
   FileText, MapPin, Printer, IndianRupee, TrendingDown, Package,
   ChevronDown, ChevronUp, Banknote, AlertTriangle, DollarSign, RotateCcw, GitBranch, Camera, UploadCloud
 } from 'lucide-react'
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 /**
  * TripSheetAck has been merged with TripSheetVerification.
@@ -50,13 +51,20 @@ function TripSheetAck() {
         setFilters(currentFilters)
       }
       // Dynamic transport details mapping
-      setTransportInfo({
+      const overrides = applyBranchOverrides(userData, {
         name: userData.transport_name || (userData.transport && userData.transport.name) || 'SANVI TRANSPORT',
         address: userData.transport_address || (userData.transport && userData.transport.address) || '',
         phone: userData.transport_phone || userData.transport_mobile || (userData.transport && userData.transport.phone) || '',
         subtitle: userData.transport_subtitle || (userData.transport && userData.transport.subtitle) || '',
         logo: userData.transport_logo_url || userData.transport_logo_path || (userData.transport && (userData.transport.logo || userData.transport.logo_path)) || ''
-      })
+      });
+      setTransportInfo({
+        name: overrides.company_name || overrides.name,
+        address: overrides.address,
+        phone: overrides.phone,
+        subtitle: overrides.subtitle,
+        logo: overrides.logo_path || overrides.logo
+      });
     }
     fetchBranches()
     fetchLogo()

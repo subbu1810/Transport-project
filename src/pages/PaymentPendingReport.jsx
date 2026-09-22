@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Loader2, AlertCircle, FileText, Download, Calendar, MapPin, SearchX, ArrowUpDown, ChevronDown, Search, X } from 'lucide-react'
+import { Loader2, AlertCircle, FileText, Download, Calendar, MapPin, SearchX, ArrowUpDown, ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 import { API_BASE_URL } from '../config/api'
 
 // ── Searchable Dropdown Component ──────────────────────────────────────────────
@@ -35,7 +35,7 @@ function SearchableSelect({ value, onChange, options, placeholder = 'All', label
       <button
         type="button"
         onClick={() => { setOpen(o => !o); setQuery('') }}
-        className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border text-[10px] font-bold text-left transition-colors ${
+        className={`w-full flex items-center justify-between px-2 py-1 rounded-lg border text-[10px] font-bold text-left transition-colors ${
           open ? 'bg-white border-rose-400 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-rose-300'
         } ${value ? 'text-slate-800' : 'text-slate-400'}`}
       >
@@ -248,6 +248,25 @@ function PaymentPendingReport() {
     return 'bg-slate-100 text-slate-600'
   }
 
+  const [expandedGroups, setExpandedGroups] = useState({})
+  const toggleGroup = (cName) => {
+    setExpandedGroups(prev => ({ ...prev, [cName]: !prev[cName] }))
+  }
+
+  // Group by consignor
+  const groupedData = React.useMemo(() => {
+    const groups = {}
+    sortedData.forEach(item => {
+      const c = item.consignor_name || 'Unknown'
+      if (!groups[c]) groups[c] = { consignor_name: c, branch: item.branch, items: [], grand_total: 0, amount_paid: 0, balance: 0 }
+      groups[c].items.push(item)
+      groups[c].grand_total += item.grand_total
+      groups[c].amount_paid += item.amount_paid
+      groups[c].balance += item.balance
+    })
+    return Object.values(groups)
+  }, [sortedData])
+
   // Summary of filtered data
   const filteredBalance = filteredData.reduce((s, i) => s + i.balance, 0)
 
@@ -258,11 +277,11 @@ function PaymentPendingReport() {
         {/* Header */}
         <div className="flex items-center justify-between px-2">
           <div className="flex items-center gap-2">
-            <span className="p-2 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-md">
+            <span className="p-1.5 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-md">
               <FileText className="text-white" size={18} />
             </span>
             <div>
-              <h1 className="text-lg font-black text-[#1E293B] tracking-tight">Payment Pending Report</h1>
+              <h1 className="text-sm font-black text-[#1E293B] tracking-tight">Payment Pending Report</h1>
               <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Receivables Audit</p>
             </div>
           </div>
@@ -284,7 +303,7 @@ function PaymentPendingReport() {
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mx-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2 mx-2">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -292,7 +311,7 @@ function PaymentPendingReport() {
               </label>
               <input type="date" value={filters.fromDate}
                 onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg focus:border-rose-500 outline-none font-bold text-slate-700 text-[10px]" />
+                className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded-lg focus:border-rose-500 outline-none font-bold text-slate-700 text-[10px]" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -300,7 +319,7 @@ function PaymentPendingReport() {
               </label>
               <input type="date" value={filters.toDate}
                 onChange={(e) => setFilters({ ...filters, toDate: e.target.value })}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg focus:border-rose-500 outline-none font-bold text-slate-700 text-[10px]" />
+                className="w-full px-2 py-1 bg-slate-50 border border-slate-100 rounded-lg focus:border-rose-500 outline-none font-bold text-slate-700 text-[10px]" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -315,7 +334,7 @@ function PaymentPendingReport() {
                   options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
                 />
               ) : (
-                <div className="w-full px-3 py-1.5 bg-slate-100 border border-slate-100 rounded-lg font-bold text-slate-500 text-[10px] uppercase">
+                <div className="w-full px-2 py-1 bg-slate-100 border border-slate-100 rounded-lg font-bold text-slate-500 text-[10px] uppercase">
                   {JSON.parse(localStorage.getItem('user'))?.branch_name || 'Own Branch'}
                 </div>
               )}
@@ -374,132 +393,146 @@ function PaymentPendingReport() {
                 <thead>
                   {/* Column Headers */}
                   <tr className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-widest border-b-2 border-slate-300">
-                    <th className="px-4 py-3 text-left font-black cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('gc_number')}>
+                    <th className="px-2 py-2 text-left font-black cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('gc_number')}>
                       GC Number <SortIcon col="gc_number" />
                     </th>
-                    <th className="px-4 py-3 text-left cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('bill_date')}>
+                    <th className="px-2 py-2 text-left cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('bill_date')}>
                       Bill Date <SortIcon col="bill_date" />
                     </th>
-                    <th className="px-4 py-3 text-left cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('consignor_name')}>
+                    <th className="px-2 py-2 text-left cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('consignor_name')}>
                       Consignor <SortIcon col="consignor_name" />
                     </th>
-                    <th className="px-4 py-3 text-left cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('destination')}>
+                    <th className="px-2 py-2 text-left cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('destination')}>
                       Destination <SortIcon col="destination" />
                     </th>
-                    <th className="px-4 py-3 text-center cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('account_type')}>
+                    <th className="px-2 py-2 text-center cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('account_type')}>
                       Acct Type <SortIcon col="account_type" />
                     </th>
-                    <th className="px-4 py-3 text-center cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('status')}>
+                    <th className="px-2 py-2 text-center cursor-pointer select-none border-r border-slate-300" onClick={() => handleSort('status')}>
                       Status <SortIcon col="status" />
                     </th>
-                    <th className="px-4 py-3 text-right cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('grand_total')}>
+                    <th className="px-2 py-2 text-right cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('grand_total')}>
                       Invoice Value <SortIcon col="grand_total" />
                     </th>
-                    <th className="px-4 py-3 text-right text-emerald-600 cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('amount_paid')}>
+                    <th className="px-2 py-2 text-right text-emerald-600 cursor-pointer select-none whitespace-nowrap border-r border-slate-300" onClick={() => handleSort('amount_paid')}>
                       Recovered <SortIcon col="amount_paid" />
                     </th>
-                    <th className="px-4 py-3 text-right text-rose-600 bg-rose-50 cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort('balance')}>
+                    <th className="px-2 py-2 text-right text-rose-600 bg-rose-50 cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort('balance')}>
                       Balance Due <SortIcon col="balance" />
                     </th>
                   </tr>
                   {/* Column Search Row */}
                   <tr className="bg-slate-50 border-b-2 border-slate-200">
-                    <th className="px-3 py-2 border-r border-slate-200">
+                    <th className="px-2 py-1 border-r border-slate-200">
                       <input type="text" placeholder="Search GC..." value={colSearch.gc_number}
                         onChange={e => setColSearch({ ...colSearch, gc_number: e.target.value })}
                         className="w-full px-2 py-1 text-[10px] rounded border border-slate-300 outline-none focus:border-rose-400 bg-white font-medium normal-case tracking-normal" />
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200"></th>
-                    <th className="px-3 py-2 border-r border-slate-200">
+                    <th className="px-2 py-1 border-r border-slate-200"></th>
+                    <th className="px-2 py-1 border-r border-slate-200">
                       <input type="text" placeholder="Search Consignor..." value={colSearch.consignor_name}
                         onChange={e => setColSearch({ ...colSearch, consignor_name: e.target.value })}
                         className="w-full px-2 py-1 text-[10px] rounded border border-slate-300 outline-none focus:border-rose-400 bg-white font-medium normal-case tracking-normal" />
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200">
+                    <th className="px-2 py-1 border-r border-slate-200">
                       <input type="text" placeholder="Destination..." value={colSearch.destination}
                         onChange={e => setColSearch({ ...colSearch, destination: e.target.value })}
                         className="w-full px-2 py-1 text-[10px] rounded border border-slate-300 outline-none focus:border-rose-400 bg-white font-medium normal-case tracking-normal" />
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200">
+                    <th className="px-2 py-1 border-r border-slate-200">
                       <input type="text" placeholder="Type..." value={colSearch.account_type}
                         onChange={e => setColSearch({ ...colSearch, account_type: e.target.value })}
                         className="w-full px-2 py-1 text-[10px] rounded border border-slate-300 outline-none focus:border-rose-400 bg-white font-medium normal-case tracking-normal text-center" />
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200">
+                    <th className="px-2 py-1 border-r border-slate-200">
                       <input type="text" placeholder="Status..." value={colSearch.status}
                         onChange={e => setColSearch({ ...colSearch, status: e.target.value })}
                         className="w-full px-2 py-1 text-[10px] rounded border border-slate-300 outline-none focus:border-rose-400 bg-white font-medium normal-case tracking-normal text-center" />
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200"></th>
-                    <th className="px-3 py-2 border-r border-slate-200"></th>
-                    <th className="px-3 py-2 bg-rose-50"></th>
+                    <th className="px-2 py-1 border-r border-slate-200"></th>
+                    <th className="px-2 py-1 border-r border-slate-200"></th>
+                    <th className="px-2 py-1 bg-rose-50"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedData.map((item, idx) => (
-                    <tr key={idx} className={`border-b border-slate-200 hover:bg-rose-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      {/* GC Number */}
-                      <td className="px-4 py-2.5 border-r border-slate-200">
-                        <span className="font-black text-slate-800 font-mono text-[11px] group-hover:text-rose-600 transition-colors">
-                          {item.gc_number}
-                        </span>
-                      </td>
-                      {/* Bill Date */}
-                      <td className="px-4 py-2.5 whitespace-nowrap text-slate-600 font-semibold text-[11px] border-r border-slate-200">
-                        {new Date(item.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                      </td>
-                      {/* Consignor */}
-                      <td className="px-4 py-2.5 max-w-[160px] border-r border-slate-200">
-                        <span className="font-bold text-slate-700 text-[11px] block truncate" title={item.consignor_name}>
-                          {item.consignor_name}
-                        </span>
-                        <span className="text-slate-400 text-[9px] font-semibold">{item.branch}</span>
-                      </td>
-                      {/* Destination */}
-                      <td className="px-4 py-2.5 text-slate-700 font-semibold text-[11px] max-w-[120px] border-r border-slate-200">
-                        <span className="block truncate" title={item.destination}>{item.destination}</span>
-                      </td>
-                      {/* Account Type */}
-                      <td className="px-4 py-2.5 text-center border-r border-slate-200">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${accountTypeBadge(item.account_type)}`}>
-                          {item.account_type}
-                        </span>
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-2.5 text-center border-r border-slate-200">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${statusBadge(item.status)}`}>
-                          {item.status}
-                        </span>
-                      </td>
-                      {/* Invoice Value */}
-                      <td className="px-4 py-2.5 text-right font-bold text-slate-700 text-[11px] font-mono border-r border-slate-200">
-                        ₹{item.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      {/* Recovered */}
-                      <td className="px-4 py-2.5 text-right font-bold text-emerald-700 text-[11px] font-mono border-r border-slate-200">
-                        ₹{item.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      {/* Balance Due */}
-                      <td className="px-4 py-2.5 text-right font-black text-rose-700 text-[11px] font-mono bg-rose-50">
-                        ₹{item.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
+                  {groupedData.map((group, gIdx) => (
+                    <React.Fragment key={gIdx}>
+                      <tr className="bg-slate-100 hover:bg-slate-200 cursor-pointer border-b-2 border-slate-300" onClick={() => toggleGroup(group.consignor_name)}>
+                        <td colSpan={6} className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300 text-[11px]">
+                          {expandedGroups[group.consignor_name] ? <ChevronDown size={14} className="inline mr-2 text-rose-500" /> : <ChevronRight size={14} className="inline mr-2 text-rose-500" />}
+                          {group.consignor_name} <span className="text-slate-500 text-[10px] ml-2">({group.items.length} GC{group.items.length !== 1 ? 's' : ''})</span>
+                        </td>
+                        <td className="px-2 py-2 text-right font-bold text-slate-700 border-r border-slate-300 text-[10px] font-mono">₹{group.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-2 py-2 text-right font-bold text-emerald-700 border-r border-slate-300 text-[10px] font-mono">₹{group.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-2 py-2 text-right font-black text-rose-700 bg-rose-50/50 text-[10px] font-mono">₹{group.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                      {expandedGroups[group.consignor_name] && group.items.map((item, idx) => (
+
+                        <tr key={idx} className={`border-b border-slate-200 hover:bg-rose-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                          {/* GC Number */}
+                          <td className="px-2 py-1.5 border-r border-slate-200">
+                            <span className="font-black text-slate-800 font-mono text-[10px] group-hover:text-rose-600 transition-colors">
+                              {item.gc_number}
+                            </span>
+                          </td>
+                          {/* Bill Date */}
+                          <td className="px-2 py-1.5 whitespace-nowrap text-slate-600 font-semibold text-[10px] border-r border-slate-200">
+                            {new Date(item.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </td>
+                          {/* Consignor */}
+                          <td className="px-2 py-1.5 max-w-[160px] border-r border-slate-200">
+                            <span className="font-bold text-slate-700 text-[10px] block truncate" title={item.consignor_name}>
+                              {item.consignor_name}
+                            </span>
+                            <span className="text-slate-400 text-[9px] font-semibold">{item.branch}</span>
+                          </td>
+                          {/* Destination */}
+                          <td className="px-2 py-1.5 text-slate-700 font-semibold text-[10px] max-w-[120px] border-r border-slate-200">
+                            <span className="block truncate" title={item.destination}>{item.destination}</span>
+                          </td>
+                          {/* Account Type */}
+                          <td className="px-2 py-1.5 text-center border-r border-slate-200">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${accountTypeBadge(item.account_type)}`}>
+                              {item.account_type}
+                            </span>
+                          </td>
+                          {/* Status */}
+                          <td className="px-2 py-1.5 text-center border-r border-slate-200">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${statusBadge(item.status)}`}>
+                              {item.status}
+                            </span>
+                          </td>
+                          {/* Invoice Value */}
+                          <td className="px-2 py-1.5 text-right font-bold text-slate-700 text-[10px] font-mono border-r border-slate-200">
+                            ₹{item.grand_total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          {/* Recovered */}
+                          <td className="px-2 py-1.5 text-right font-bold text-emerald-700 text-[10px] font-mono border-r border-slate-200">
+                            ₹{item.amount_paid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          {/* Balance Due */}
+                          <td className="px-2 py-1.5 text-right font-black text-rose-700 text-[10px] font-mono bg-rose-50">
+                            ₹{item.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </tbody>
                 {/* Footer Totals */}
                 {sortedData.length > 0 && (
                   <tfoot>
-                    <tr className="bg-slate-200 border-t-2 border-slate-400 font-black text-[11px]">
-                      <td colSpan={6} className="px-4 py-3 text-slate-600 uppercase tracking-widest text-[9px] border-r border-slate-300">
+                    <tr className="bg-slate-200 border-t-2 border-slate-400 font-black text-[10px]">
+                      <td colSpan={6} className="px-2 py-2 text-slate-600 uppercase tracking-widest text-[9px] border-r border-slate-300">
                         Total — {sortedData.length} GC{sortedData.length !== 1 ? 's' : ''}
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-800 font-mono border-r border-slate-300">
+                      <td className="px-2 py-2 text-right text-slate-800 font-mono border-r border-slate-300">
                         ₹{sortedData.reduce((s, i) => s + i.grand_total, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-4 py-3 text-right text-emerald-800 font-mono border-r border-slate-300">
+                      <td className="px-2 py-2 text-right text-emerald-800 font-mono border-r border-slate-300">
                         ₹{sortedData.reduce((s, i) => s + i.amount_paid, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-4 py-3 text-right text-rose-800 font-mono bg-rose-100">
+                      <td className="px-2 py-2 text-right text-rose-800 font-mono bg-rose-100">
                         ₹{sortedData.reduce((s, i) => s + i.balance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>

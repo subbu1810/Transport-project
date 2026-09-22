@@ -6,6 +6,7 @@ import {
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function WaybillTallyReport() {
   const [filters, setFilters] = useState({
@@ -31,13 +32,20 @@ function WaybillTallyReport() {
   useEffect(() => {
     // 1. Priority Initial Load from LocalStorage
     if (currentUser) {
-      setSettings(prev => ({
-        ...prev,
+      const overrides = applyBranchOverrides(currentUser, {
         company_name: currentUser.transport_name || '',
         address: currentUser.transport_address || '',
         phone: currentUser.transport_phone || '',
         gstin: currentUser.gst_number || currentUser.transport_gstin || '',
         logo_path: currentUser.transport_logo_url || ''
+      });
+      setSettings(prev => ({
+        ...prev,
+        company_name: overrides.company_name,
+        address: overrides.address,
+        phone: overrides.phone,
+        gstin: overrides.gstin,
+        logo_path: overrides.logo_path || overrides.logo
       }))
     }
 
@@ -59,13 +67,22 @@ function WaybillTallyReport() {
       
       if (setResp.data.success) {
         const s = setResp.data.data
+        const userData = JSON.parse(localStorage.getItem('user')) || {};
+        const overrides = applyBranchOverrides(userData, {
+          company_name: s.transport_name || s.company_name || 'Transport Logistics',
+          address: s.transport_address || s.address || '',
+          phone: s.transport_phone || s.phone || '',
+          gstin: s.gst_number || s.gstin || '',
+          logo_path: s.logo_path || ''
+        });
+
         setSettings(prev => ({
           ...prev,
-          company_name: prev.company_name || s.transport_name || s.company_name || 'Transport Logistics',
-          address: prev.address || s.transport_address || s.address || '',
-          phone: prev.phone || s.transport_phone || s.phone || '',
-          gstin: prev.gstin || s.gst_number || s.gstin || '',
-          logo_path: prev.logo_path || s.logo_path || ''
+          company_name: prev.company_name || overrides.company_name,
+          address: prev.address || overrides.address,
+          phone: prev.phone || overrides.phone,
+          gstin: prev.gstin || overrides.gstin,
+          logo_path: prev.logo_path || overrides.logo_path || overrides.logo
         }))
       }
     } catch (err) { console.error('Error fetching meta:', err) }

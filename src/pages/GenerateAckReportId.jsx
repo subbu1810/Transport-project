@@ -7,6 +7,7 @@ import {
   ExternalLink, Building2, DownloadCloud, Eye
 } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function GenerateAckReportId() {
   const [activeTab, setActiveTab] = useState('generate') 
@@ -47,12 +48,20 @@ function GenerateAckReportId() {
       }
       
       // Dynamic transport details mapping
-      setTransportInfo({
+      const overrides = applyBranchOverrides(user, {
         name: user.transport_name || (user.transport && user.transport.name) || 'SANVI TRANSPORT',
         address: user.transport_address || (user.transport && user.transport.address) || '',
         phone: user.transport_phone || user.transport_mobile || (user.transport && user.transport.phone) || '',
         subtitle: user.transport_subtitle || (user.transport && user.transport.subtitle) || 'THE WINGS OF LOGISTICS',
         logo: user.transport_logo_url || user.transport_logo_path || (user.transport && (user.transport.logo || user.transport.logo_path)) || ''
+      });
+      
+      setTransportInfo({
+        name: overrides.company_name || overrides.name,
+        address: overrides.address,
+        phone: overrides.phone,
+        subtitle: overrides.subtitle,
+        logo: overrides.logo_path || overrides.logo
       })
       fetchLogo()
     }

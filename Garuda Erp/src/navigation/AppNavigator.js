@@ -2,8 +2,10 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
 import SplashScreen from '../screens/SplashScreen';
+import CompanySetupScreen from '../screens/CompanySetupScreen';
 import LoginScreen from '../screens/LoginScreen';
 import TabNavigator from './TabNavigator';
+
 import GCModifyScreen from '../screens/GCModifyScreen';
 import GCTrackScreen from '../screens/GCTrackScreen';
 import GCInwardScreen from '../screens/GCInwardScreen';
@@ -23,7 +25,9 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Splash">
         <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="CompanySetup" component={CompanySetupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+
         <Stack.Screen name="Home" component={TabNavigator} options={{ headerShown: false }} />
         <Stack.Screen name="GCModify" component={GCModifyScreen} options={{ headerShown: false }} />
         <Stack.Screen name="GCTrack" component={GCTrackScreen} options={{ headerShown: false }} />

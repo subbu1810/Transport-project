@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Printer, Loader2, FileText, Search, Package, MapPin, Calendar, User, ArrowRight, X, Clock, Eye, Layers } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function ACKReportBundle() {
   const [bundles, setBundles] = useState([])
@@ -24,9 +25,13 @@ function ACKReportBundle() {
       } else {
         fetchBundles({ branch_id: '' })
       }
-      setTransportInfo({
+      const overrides = applyBranchOverrides(user, {
         name: user.transport_name || (user.transport && user.transport.name) || '',
         subtitle: user.transport_subtitle || (user.transport && user.transport.subtitle) || 'THE WINGS OF LOGISTICS',
+      });
+      setTransportInfo({
+        name: overrides.company_name || overrides.name,
+        subtitle: overrides.subtitle || 'THE WINGS OF LOGISTICS',
       })
     } else {
       fetchBundles({ branch_id: '' })

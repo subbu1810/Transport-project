@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTransportConfig } from '../services/transportConfig';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function SplashScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -22,28 +24,33 @@ export default function SplashScreen({ navigation }) {
       })
     ]).start();
 
-    // Check auth status while animating
+    // Check transport configuration & auth status while animating
     const checkAuth = async () => {
       try {
+        const transportConfig = await getTransportConfig();
         const user = await AsyncStorage.getItem('user');
         const token = await AsyncStorage.getItem('token');
-        // Wait for 2 seconds to let the user see the beautiful garuda logo animation
+
         setTimeout(() => {
-          if (user || token) {
+          if (!transportConfig) {
+            // First time setup - prompt user to scan QR or select company
+            navigation.replace('CompanySetup');
+          } else if (user || token) {
             navigation.replace('Home');
           } else {
             navigation.replace('Login');
           }
-        }, 2000);
+        }, 1800);
       } catch (error) {
         setTimeout(() => {
-          navigation.replace('Login');
-        }, 2000);
+          navigation.replace('CompanySetup');
+        }, 1800);
       }
     };
 
     checkAuth();
   }, [fadeAnim, scaleAnim, navigation]);
+
 
   return (
     <View style={styles.container}>

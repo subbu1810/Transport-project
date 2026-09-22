@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Filter, Search, Download, Printer, Edit2, Trash2, X, CheckCircle, Calendar, Building2, Save, XCircle, AlertCircle } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function CashBookDetails() {
     const [entries, setEntries] = useState([])
@@ -12,6 +13,12 @@ function CashBookDetails() {
     const [showCloseModal, setShowCloseModal] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const [loading, setLoading] = useState(false)
+
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(50)
+    const [paginationData, setPaginationData] = useState(null)
+    const [backendTotals, setBackendTotals] = useState(null)
 
     const [currentEntry, setCurrentEntry] = useState({
         id: '',
@@ -71,12 +78,21 @@ function CashBookDetails() {
             try {
                 const user = JSON.parse(userData)
                 setCurrentUser(user)
-                setCompanyDetails({
-                    name: user.transport_name || '',
+                
+                const details = applyBranchOverrides(user, {
+                    company_name: user.transport_name || '',
                     subtitle: user.transport_subtitle || '',
                     address: user.transport_address || '',
                     phone: user.transport_phone || '',
-                    logo: user.transport_logo_url || user.transport_logo_path || null
+                    logo_path: user.transport_logo_url || user.transport_logo_path || null
+                });
+
+                setCompanyDetails({
+                    name: details.company_name,
+                    subtitle: details.subtitle,
+                    address: details.address,
+                    phone: details.phone,
+                    logo: details.logo_path || details.logo
                 })
                 if (user && user.role !== 'superadmin') {
                     setFilterBranch(user.branch_name)
@@ -92,7 +108,7 @@ function CashBookDetails() {
             fetchEntries()
             checkClosingStatus()
         }
-    }, [filterFromDate, filterToDate, filterBranch, searchQuery, branches])
+    }, [filterFromDate, filterToDate, filterBranch, searchQuery, branches, currentPage, itemsPerPage])
 
     useEffect(() => {
         fetchBranches()
@@ -125,7 +141,9 @@ function CashBookDetails() {
             const params = {
                 from_date: filterFromDate,
                 to_date: filterToDate,
-                search: searchQuery
+                search: searchQuery,
+                page: currentPage,
+                per_page: itemsPerPage
             }
             if (filterBranch && filterBranch !== 'All Branches') {
                 const branchObj = branches.find(b => b.branch_name === filterBranch);
@@ -135,7 +153,11 @@ function CashBookDetails() {
             }
             const response = await fetch(`${API_BASE_URL}/cash-book?` + new URLSearchParams(params))
             const data = await response.json()
-            if (data.success) setEntries(data.data)
+            if (data.success) {
+                setEntries(data.data)
+                setPaginationData(data.pagination)
+                setBackendTotals(data.totals)
+            }
         } catch (err) {
             console.error('Error fetching entries:', err)
         } finally {
@@ -688,10 +710,9 @@ function CashBookDetails() {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {entries.length > 0 ? entries.map((entry, index) => {
-                                const balance = entries.slice(0, index + 1).reduce((acc, curr) => {
-                                    return curr.transaction_type === 'CREDIT' ? acc + Number(curr.amount) : acc - Number(curr.amount)
-                                }, 0)
                                 const isEntryClosed = isClosed || closedDays.has(entry.transaction_date);
+                                const isSystemEntry = entry.authorised_by === 'System Auto' || (entry.remarks && entry.remarks.includes('GC:'));
+                                const isRestricted = isEntryClosed || isSystemEntry;
 
                                 return (
                                     <tr key={entry.id} className="hover:bg-blue-50/50 transition border-b border-gray-100">
@@ -708,16 +729,16 @@ function CashBookDetails() {
                                             {entry.transaction_type === 'DEBIT' ? Number(entry.amount).toLocaleString('en-IN') : '-'}
                                         </td>
                                         <td className="px-3 py-1.5 text-right font-black text-gray-800 bg-gray-50/30">
-                                            {balance.toLocaleString('en-IN')}
+                                            {Number(entry.running_balance || 0).toLocaleString('en-IN')}
                                         </td>
                                         <td className="px-3 py-1.5 no-print">
                                             <div className="flex justify-center gap-2">
                                                 <button
                                                     onClick={() => handleOpenModal(entry.transaction_type, entry)}
-                                                    disabled={isEntryClosed}
-                                                    className={`p-1.5 rounded-lg transition ${isEntryClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-blue-600 hover:bg-blue-100'
+                                                    disabled={isRestricted}
+                                                    className={`p-1.5 rounded-lg transition ${isRestricted ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-blue-600 hover:bg-blue-100'
                                                         }`}
-                                                    title={isEntryClosed ? "Restricted: DayBook Closed" : "Edit"}
+                                                    title={isSystemEntry ? "Restricted: System Generated Entry" : (isEntryClosed ? "Restricted: DayBook Closed" : "Edit")}
                                                 >
                                                     <Edit2 size={16} />
                                                 </button>
@@ -730,10 +751,10 @@ function CashBookDetails() {
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(entry.id)}
-                                                    disabled={isEntryClosed}
-                                                    className={`p-1.5 rounded-lg transition ${isEntryClosed ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-rose-600 hover:bg-rose-100'
+                                                    disabled={isRestricted}
+                                                    className={`p-1.5 rounded-lg transition ${isRestricted ? 'text-gray-300 cursor-not-allowed opacity-50' : 'text-rose-600 hover:bg-rose-100'
                                                         }`}
-                                                    title={isEntryClosed ? "Restricted: DayBook Closed" : "Delete"}
+                                                    title={isSystemEntry ? "Restricted: System Generated Entry" : (isEntryClosed ? "Restricted: DayBook Closed" : "Delete")}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -757,29 +778,118 @@ function CashBookDetails() {
                             )}
                         </tbody>
                         <tfoot className="bg-gray-50 font-black border-t-2 border-[#1e3a8a]/20">
-                            {!isClosed ? (
+                            {!isClosed && backendTotals ? (
                                 <tr>
-                                    <td colSpan="4" className="px-3 py-2 text-right text-[#1e3a8a] text-[10px] uppercase">Totals:</td>
+                                    <td colSpan="4" className="px-3 py-2 text-right text-[#1e3a8a] text-[10px] uppercase">Overall Totals:</td>
                                     <td className="px-3 py-2 text-right text-emerald-700 bg-emerald-50/50">
-                                        ₹{entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
+                                        ₹{Number(backendTotals.credit || 0).toLocaleString('en-IN')}
                                     </td>
                                     <td className="px-3 py-2 text-right text-rose-700 bg-rose-50/50">
-                                        ₹{entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0).toLocaleString('en-IN')}
+                                        ₹{Number(backendTotals.debit || 0).toLocaleString('en-IN')}
                                     </td>
                                     <td className="px-3 py-2 text-right text-[#1e3a8a] bg-blue-50 text-xs">
-                                        ₹{(entries.filter(e => e.transaction_type === 'CREDIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0) -
-                                            entries.filter(e => e.transaction_type === 'DEBIT' && !e.is_closing_entry).reduce((a, b) => a + Number(b.amount), 0)).toLocaleString('en-IN')}
+                                        ₹{Number(backendTotals.balance || 0).toLocaleString('en-IN')}
                                     </td>
                                     <td className="no-print"></td>
                                 </tr>
-                            ) : (
+                            ) : isClosed ? (
                                 <tr>
                                     <td colSpan="8" className="px-4 py-2 text-center text-gray-400 text-[10px] uppercase tracking-widest italic">End of Summary - All Transactions Protected</td>
                                 </tr>
-                            )}
+                            ) : null}
                         </tfoot>
                     </table>
                 </div>
+
+                {/* Unified Pagination Controls */}
+                {paginationData && (
+                    <div className="p-3 bg-orange-50/50 rounded-b-lg no-print">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-white border border-gray-200 rounded-md shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <select
+                                    value={itemsPerPage}
+                                    onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="pl-3 pr-8 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none bg-white transition"
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+
+                                <div className="h-4 w-px bg-gray-200"></div>
+
+                                <div className="flex items-center gap-1 text-sm text-gray-600">
+                                    <button
+                                        onClick={() => setCurrentPage(1)}
+                                        disabled={currentPage === 1}
+                                        className="p-1 hover:bg-gray-100 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                                        title="First Page"
+                                    >
+                                        |&lt;
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                        disabled={currentPage === 1}
+                                        className="p-1 hover:bg-gray-100 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                                        title="Previous Page"
+                                    >
+                                        &lt;
+                                    </button>
+                                    
+                                    <div className="flex items-center gap-2 mx-2">
+                                        <span>Page</span>
+                                        <input
+                                            type="number"
+                                            value={currentPage}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value);
+                                                if (val >= 1 && val <= paginationData.last_page) {
+                                                    setCurrentPage(val);
+                                                }
+                                            }}
+                                            className="w-12 px-2 py-1 text-center text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                                            min={1}
+                                            max={paginationData.last_page}
+                                        />
+                                        <span>of {paginationData.last_page}</span>
+                                    </div>
+
+                                    <button
+                                        onClick={() => setCurrentPage(Math.min(paginationData.last_page, currentPage + 1))}
+                                        disabled={currentPage === paginationData.last_page}
+                                        className="p-1 hover:bg-gray-100 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                                        title="Next Page"
+                                    >
+                                        &gt;
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentPage(paginationData.last_page)}
+                                        disabled={currentPage === paginationData.last_page}
+                                        className="p-1 hover:bg-gray-100 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                                        title="Last Page"
+                                    >
+                                        &gt;|
+                                    </button>
+                                </div>
+
+                                <div className="h-4 w-px bg-gray-200 mx-1"></div>
+
+                                <button
+                                    onClick={() => fetchEntries()}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
+                                    title="Refresh"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+                                </button>
+                            </div>
+
+                            <div className="text-sm font-medium text-gray-700">
+                                Displaying {(paginationData.current_page - 1) * paginationData.per_page + 1} to {Math.min(paginationData.current_page * paginationData.per_page, paginationData.total)} of {paginationData.total} items
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Entry Modal */}

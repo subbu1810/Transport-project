@@ -7,6 +7,7 @@ import {
 import * as XLSX from 'xlsx'
 import GCReportReceipt from '../components/GCReportReceipt'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 
 
@@ -50,6 +51,11 @@ function GCReport() {
   const [showPrintPreview, setShowPrintPreview] = useState(false)
   const [printMode, setPrintMode] = useState('full')
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const [pageInput, setPageInput] = useState('1')
+
   useEffect(() => {
     const userData = localStorage.getItem('user')
     if (userData) {
@@ -78,7 +84,7 @@ function GCReport() {
       // ── PRIORITY 1: Use transport data from the logged-in user (localStorage) ──
       // This is the most reliable and up-to-date source.
       if (userData?.transport_name) {
-        setTransportDetails({
+        setTransportDetails(applyBranchOverrides(userData, {
           name: userData.transport_name || userData.branch?.branch_name || '',
           address: userData.transport_address || userData.branch?.branch_address || '',
           phone: userData.transport_phone || userData.branch?.branch_phone || '',
@@ -87,7 +93,7 @@ function GCReport() {
           logo_path: userData.transport_logo_url || null,
           upi_qr_path: userData.upi_qr_url || null,
           upi_id: null
-        })
+        }))
       }
 
       // ── PRIORITY 2: Fetch UPI / QR details from settings (these are not in user data) ──
@@ -102,7 +108,7 @@ function GCReport() {
           logoUrl = logoPath.startsWith('http') ? logoPath : `${STORAGE_URL}/${logoPath.replace(/^\/+/, '')}`;
         }
 
-        return {
+        return applyBranchOverrides(userData || JSON.parse(localStorage.getItem('user') || '{}'), {
           ...prev,
           // Priotitize settings data if available to ensure correct branding
           name: settings.company_name || prev.name || '',
@@ -115,7 +121,7 @@ function GCReport() {
           upi_account_holder: settings.upi_account_holder,
           upi_qr_path: prev?.upi_qr_path || settings.upi_qr_path,
           gstin: userData.transport_gstin || userData.gstin || userData.gst_number || settings.gst_number || settings.gstin || prev?.gstin || ''
-        };
+        });
       });
     } catch (err) {
       console.error('Error fetching transport details:', err)
@@ -125,7 +131,7 @@ function GCReport() {
           ? (userData.transport_logo_url.startsWith('http') ? userData.transport_logo_url : `${STORAGE_URL}/${userData.transport_logo_url.replace(/^\/+/, '')}`)
           : null;
 
-        setTransportDetails({
+        setTransportDetails(applyBranchOverrides(userData, {
           name: userData.transport_name || userData.branch?.branch_name || '',
           address: userData.transport_address || '',
           phone: userData.transport_phone || '',
@@ -133,7 +139,7 @@ function GCReport() {
           logo: logoUrl,
           upi_qr_path: userData.upi_qr_url || null,
           upi_id: null,
-        })
+        }))
       }
     }
   }
@@ -256,7 +262,7 @@ function GCReport() {
     const waybill = printingWaybill;
     
     // Select the printable area from the preview modal to check images
-    const printableArea = document.getElementById('printable-receipt-preview');
+    const printableArea = document.getElementById('printable-receipt');
     if (!printableArea) return;
 
     const images = printableArea.querySelectorAll('img');
@@ -636,9 +642,45 @@ function GCReport() {
     return true;
   });
 
+  // Pagination Logic
+  const totalItems = filteredWaybills.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages || 1);
+      setPageInput((totalPages || 1).toString());
+    }
+  }, [totalPages, currentPage]);
+
+  const handlePageInputChange = (e) => {
+    setPageInput(e.target.value);
+  };
+
+  const handlePageInputKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      const page = parseInt(pageInput, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages) {
+        setCurrentPage(page);
+      } else {
+        setPageInput(currentPage.toString());
+      }
+    }
+  };
+
+  const goToPage = (page) => {
+    setCurrentPage(page);
+    setPageInput(page.toString());
+  };
+
+  const paginatedWaybills = filteredWaybills.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <div className={`p-2 space-y-3 ${printingWaybill ? 'is-printing-receipt' : ''}`}>
-      <div className="gc-report-main-content print:hidden">
+      <div className="gc-report-main-content">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-blue-100 rounded-md">
@@ -809,7 +851,7 @@ function GCReport() {
             </div>
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 bg-white rounded-full text-sm font-bold text-gray-600 border border-gray-200">
-                Total: {waybills.length} records
+                Total: {totalItems} records
               </span>
               
               {/* NEW: Quick Search Bar */}
@@ -926,7 +968,7 @@ function GCReport() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredWaybills.length === 0 ? (
+                {paginatedWaybills.length === 0 ? (
                   <tr>
                     <td colSpan="15" className="px-4 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-3">
@@ -936,13 +978,13 @@ function GCReport() {
                     </td>
                   </tr>
                 ) : (
-                  filteredWaybills.map((waybill, index) => (
+                  paginatedWaybills.map((waybill, index) => (
                     <tr
                       key={waybill.id || waybill.gc_number}
                       onDoubleClick={() => setSelectedGC(waybill)}
                       className="hover:bg-yellow-50 transition-colors border-b border-gray-100 text-[11px] font-medium cursor-pointer"
                     >
-                      <td className="px-2 py-1.5 text-center font-bold text-gray-500">{index + 1}</td>
+                      <td className="px-2 py-1.5 text-center font-bold text-gray-500">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(waybill.bill_date)}</td>
                       <td className="px-2 py-1.5 font-bold text-blue-800">{waybill.gc_number}</td>
                       <td className="px-2 py-1.5 truncate max-w-[100px]">{waybill.origin_branch?.branch_name || '-'}</td>
@@ -1062,6 +1104,84 @@ function GCReport() {
               )}
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalItems > 0 && (
+            <div className="flex flex-wrap items-center justify-between mt-4 px-2 py-2 bg-gray-50 border border-gray-200 rounded-lg print:hidden text-xs text-gray-700">
+              <div className="flex items-center gap-2">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    goToPage(1);
+                  }}
+                  className="px-2 py-1 border border-gray-300 rounded bg-white outline-none focus:border-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <div className="flex items-center gap-1 border-l pl-2 border-gray-300">
+                  <button
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First Page"
+                  >
+                    <span className="font-bold">|&lt;</span>
+                  </button>
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Previous Page"
+                  >
+                    <span className="font-bold">&lt;</span>
+                  </button>
+                  <div className="flex items-center gap-1 px-2">
+                    <span>Page</span>
+                    <input
+                      type="text"
+                      value={pageInput}
+                      onChange={handlePageInputChange}
+                      onKeyDown={handlePageInputKeyDown}
+                      onBlur={() => setPageInput(currentPage.toString())}
+                      className="w-12 px-1 py-0.5 text-center border border-gray-300 rounded outline-none focus:border-blue-500"
+                    />
+                    <span>of {totalPages}</span>
+                  </div>
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Next Page"
+                  >
+                    <span className="font-bold">&gt;</span>
+                  </button>
+                  <button
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last Page"
+                  >
+                    <span className="font-bold">&gt;|</span>
+                  </button>
+                </div>
+                <button
+                  onClick={fetchWaybills}
+                  className="p-1 ml-2 rounded hover:bg-gray-200 text-blue-600"
+                  title="Refresh Data"
+                >
+                  <RotateCcw size={14} />
+                </button>
+              </div>
+              <div className="font-medium">
+                Displaying {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} items
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1097,7 +1217,7 @@ function GCReport() {
           </div>
 
           {/* Receipt Preview - Scrollable area */}
-          <div className="flex-1 overflow-auto bg-gray-200/50 p-4 md:p-8 flex justify-center" id="printable-receipt-preview">
+          <div className="flex-1 overflow-auto bg-gray-200/50 p-4 md:p-8 flex justify-center" id="printable-receipt">
             <div className="bg-white shadow-2xl p-[5mm] md:p-[10mm] min-w-fit h-fit">
               <GCReportReceipt
                 waybill={printingWaybill}
@@ -1137,17 +1257,18 @@ function GCReport() {
           /* ── SCENARIO A: PRINTING THE GC REPORT ── */
           /* Only apply if the specialized 'is-printing-receipt' class is ABSENT */
           body:not(.is-printing-receipt) {
-            @page { size: A4 landscape; margin: 10mm 8mm; }
+            @page { size: A4 landscape; margin: 0.5in; }
             background: white !important; 
+            color: black !important;
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important; 
           }
 
-          body:not(.is-printing-receipt) html, 
-          body:not(.is-printing-receipt) #root, 
-          body:not(.is-printing-receipt) #root > div, 
-          body:not(.is-printing-receipt) main, 
-          body:not(.is-printing-receipt) .min-h-screen {
+          html, 
+          #root, 
+          #root > div, 
+          main, 
+          .min-h-screen {
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
@@ -1162,6 +1283,9 @@ function GCReport() {
           body:not(.is-printing-receipt) .print\\:hidden,
           body:not(.is-printing-receipt) .gc-receipt-print-block,
           body:not(.is-printing-receipt) .fixed.bottom-0 { display: none !important; }
+          
+          /* Hide search input fields inside table headers on print */
+          body:not(.is-printing-receipt) table input { display: none !important; }
           
           body:not(.is-printing-receipt) .p-2, 
           body:not(.is-printing-receipt) .sm\\:p-4, 
@@ -1183,30 +1307,40 @@ function GCReport() {
           body:not(.is-printing-receipt) table { 
             width: 100% !important; 
             border-collapse: collapse !important; 
-            margin-top: 15px !important;
+            margin-top: 10px !important;
             table-layout: auto !important;
-            border: 1px solid #000 !important;
+            border: 1.5px solid #000 !important;
           }
           body:not(.is-printing-receipt) tr { 
             page-break-inside: avoid !important;
-            border-bottom: 0.5pt solid #000 !important;
+            border-bottom: 1px solid #000 !important;
           }
           body:not(.is-printing-receipt) th, 
           body:not(.is-printing-receipt) td { 
-            border: 0.5pt solid #000 !important; 
-            padding: 4px 4px !important; 
-            font-size: 8pt !important; 
+            border: 1px solid #000 !important; 
+            padding: 5px 6px !important; 
+            font-size: 8.5pt !important; 
             line-height: 1.3 !important;
             color: #000 !important;
             word-wrap: break-word !important;
-            vertical-align: top !important;
+            vertical-align: middle !important;
           }
           body:not(.is-printing-receipt) thead { display: table-header-group !important; }
           body:not(.is-printing-receipt) th { 
-            background-color: #f1f5f9 !important;
+            background-color: #f3f4f6 !important;
             font-weight: 900 !important;
             text-transform: uppercase !important;
-            font-size: 7.5pt !important;
+            font-size: 8pt !important;
+          }
+
+          /* Force status badges and table spans to black text with no background colors */
+          body:not(.is-printing-receipt) table span {
+            background: transparent !important;
+            color: #000 !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            font-weight: bold !important;
           }
 
           /* Auto Layout takes care of widths, so we don't need fixed px widths. Just hide the non-print columns */
@@ -1254,8 +1388,12 @@ function GCReport() {
           }
 
           /* COLLAPSE BACKGROUND CONTENT TO PREVENT MULTIPLE PAGES */
-          body.is-printing-receipt #root > div > div > div:not(.gc-receipt-print-block),
-          body.is-printing-receipt .bg-white.rounded-lg.shadow-md.p-4.space-y-4 {
+          body.is-printing-receipt aside,
+          body.is-printing-receipt header,
+          body.is-printing-receipt nav,
+          body.is-printing-receipt footer,
+          body.is-printing-receipt .no-print,
+          body.is-printing-receipt .gc-report-main-content {
             display: none !important;
           }
 
@@ -1272,8 +1410,8 @@ function GCReport() {
           }
 
           /* Force the preview area to be perfectly clean and white during print */
-          #printable-receipt-preview,
-          #printable-receipt-preview > div {
+          #printable-receipt,
+          #printable-receipt > div {
             background: white !important;
             padding: 0 !important;
             margin: 0 !important;
@@ -1281,6 +1419,10 @@ function GCReport() {
             box-shadow: none !important;
             width: 100% !important;
             display: block !important;
+            visibility: visible !important;
+          }
+          #printable-receipt * {
+            visibility: visible !important;
           }
 
           body.is-printing-receipt .receipt-container {

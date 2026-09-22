@@ -16,15 +16,33 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
+import { getTransportConfig } from '../services/transportConfig';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [transportConfig, setTransportConfig] = useState(null);
 
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const scaleAnim = React.useRef(new Animated.Value(0.5)).current;
+
+  React.useEffect(() => {
+    const loadTransport = async () => {
+      const config = await getTransportConfig();
+      setTransportConfig(config);
+    };
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadTransport();
+    });
+    loadTransport();
+
+    return unsubscribe;
+  }, [navigation]);
+
 
   React.useEffect(() => {
     Animated.parallel([
@@ -75,7 +93,7 @@ export default function LoginScreen({ navigation }) {
         Alert.alert('Network Error', 'Unable to reach the server. Please check your connection.');
       } else {
         // Something happened in setting up the request
-        Alert.alert('Error', 'An unexpected error occurred.');
+        Alert.alert('Error', getErrorMessage(error, 'An unexpected error occurred.'));
       }
     } finally {
       setLoading(false);
@@ -111,6 +129,24 @@ export default function LoginScreen({ navigation }) {
           
           <Text style={styles.welcomeText}>Sign In</Text>
           <Text style={styles.instructionText}>Access your transport dashboard</Text>
+
+          {/* Active Company Badge */}
+          <TouchableOpacity
+            style={styles.companyBadge}
+            onPress={() => navigation.navigate('CompanySetup', { canCancel: true })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.companyBadgeLeft}>
+              <Ionicons name="business" size={15} color="#059669" style={{ marginRight: 6 }} />
+              <Text style={styles.companyBadgeText} numberOfLines={1}>
+                {transportConfig?.name || 'Select Transport'}
+              </Text>
+            </View>
+            <View style={styles.changePill}>
+              <Text style={styles.changePillText}>Change</Text>
+            </View>
+          </TouchableOpacity>
+
 
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Username</Text>
@@ -225,7 +261,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#f8fafc',
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -280,4 +315,42 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
+  companyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 16,
+    width: '100%',
+  },
+  companyBadgeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  companyBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065f46',
+    flexShrink: 1,
+  },
+  changePill: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  changePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
 });
+

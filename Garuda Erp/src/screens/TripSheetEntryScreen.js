@@ -8,6 +8,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function TripSheetEntryScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -85,7 +86,7 @@ export default function TripSheetEntryScreen({ navigation }) {
 
     } catch (error) {
       console.error('Failed to load initial data', error);
-      Alert.alert('Error', 'Failed to load master data.');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to load master data.'));
     } finally {
       setLoading(false);
     }
@@ -201,7 +202,7 @@ export default function TripSheetEntryScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'An error occurred while submitting.');
+      Alert.alert('Error', getErrorMessage(error, 'An error occurred while submitting.'));
     } finally {
       setSubmitting(false);
     }

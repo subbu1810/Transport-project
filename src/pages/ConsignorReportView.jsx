@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Loader2, AlertCircle, FileText, Printer, Search, Trash2, Edit2, CheckCircle2, Filter } from 'lucide-react'
 import { useTabs } from '../contexts/TabContext'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function ConsignorReportView() {
   const [filters, setFilters] = useState({
@@ -36,13 +37,20 @@ function ConsignorReportView() {
     // 1. Initial load from localStorage for immediate display
     const storedUser = JSON.parse(localStorage.getItem('user'))
     if (storedUser) {
-      setSettings(prev => ({
-        ...prev,
+      const overrides = applyBranchOverrides(storedUser, {
         company_name: storedUser.transport_name || '',
         address: storedUser.transport_address || '',
         phone: storedUser.transport_phone || '',
         mobile: storedUser.transport_mobile || '',
         gstin: storedUser.transport_gstin || storedUser.gst_number || '',
+      });
+      setSettings(prev => ({
+        ...prev,
+        company_name: overrides.company_name,
+        address: overrides.address,
+        phone: overrides.phone,
+        mobile: overrides.mobile || overrides.phone,
+        gstin: overrides.gstin,
       }))
     }
     
@@ -74,12 +82,19 @@ function ConsignorReportView() {
         const response = await axios.get(`${API_BASE_URL}/settings`);
         if (response.data.success && response.data.data) {
           const s = response.data.data;
+          const userObj = JSON.parse(localStorage.getItem('user')) || {};
+          const overrides = applyBranchOverrides(userObj, {
+            company_name: s.transport_name || s.company_name,
+            address: s.transport_address || s.address,
+            phone: s.transport_phone || s.phone,
+            gstin: s.gstin || s.gst_number
+          });
           setSettings(prev => ({
             ...prev,
-            company_name: s.transport_name || s.company_name || prev.company_name,
-            address: s.transport_address || s.address || prev.address,
-            phone: s.transport_phone || s.phone || prev.phone,
-            gstin: s.gstin || s.gst_number || prev.gstin
+            company_name: prev.company_name || overrides.company_name,
+            address: prev.address || overrides.address,
+            phone: prev.phone || overrides.phone,
+            gstin: prev.gstin || overrides.gstin
           }));
         }
       }

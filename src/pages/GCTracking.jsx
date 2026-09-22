@@ -7,6 +7,7 @@ import {
 import axios from 'axios'
 import GCPrintReceipt from '../components/GCPrintReceipt'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 
 
@@ -107,7 +108,7 @@ function GCTracking() {
                 const globalLogo = settings.logo_path || null;
                 const globalQR = settings.upi_qr_path || null;
 
-                setCompanyDetails({
+                setCompanyDetails(applyBranchOverrides(userData, {
                     company_name: userData.transport_name || settings.company_name || userData.branch?.branch_name || 'Transport Logistics',
                     address: userData.transport_address || settings.address || userData.branch?.branch_address || '',
                     phone: userData.transport_phone || settings.phone || userData.branch?.branch_phone || '',
@@ -116,7 +117,7 @@ function GCTracking() {
                     gstin: userData.transport_gstin || userData.gstin || userData.gst_number || settings.gst_number || settings.gstin || '',
                     logo_path: userData.transport_logo_url || globalLogo,
                     upi_qr_path: userData.upi_qr_url || globalQR,
-                });
+                }));
 
                 // Fetch Branches
                 const branchResp = await fetch(`${API_BASE_URL}/branches`);
@@ -471,107 +472,72 @@ function GCTracking() {
                             </SectionCard>
                         </div>
 
-                        {/* ── ROW 2: Trip & Inward Status ── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                            {/* Outward / Trip Sheet */}
-                            <SectionCard title="Outward / Trip Status" icon={Truck} color="amber">
-                                <div className="p-4 space-y-2.5">
-                                    {trackingData.trip_sheets?.length > 0 ? (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Trip Number</p>
-                                                    <p className="text-lg font-black text-blue-700">{trackingData.trip_sheets[0].trip_number}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase border bg-green-100 text-green-700 border-green-300">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> PROCESSED
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
-                                                <InfoRow label="Trip Number" value={trackingData.trip_sheets[0].trip_number} />
-                                                <InfoRow label="Trip Date" value={formatDate(trackingData.trip_sheets[0].dispatch_date)} />
-                                                <InfoRow label="Vehicle No" value={trackingData.trip_sheets[0].vehicle?.vehicle_number} />
-                                                <InfoRow label="Driver" value={trackingData.trip_sheets[0].driver?.name} />
-                                                <InfoRow label="Consignor Report ID" value={trackingData.consignor_receipts && trackingData.consignor_receipts.length > 0 ? trackingData.consignor_receipts[0].receipt_no : '—'} accent={trackingData.consignor_receipts && trackingData.consignor_receipts.length > 0 ? 'text-violet-600 font-bold' : ''} />
-                                                <InfoRow label="Amt Paid Status" value={trackingData.amount_paid > 0 ? 'YES' : 'NO'} accent={trackingData.amount_paid > 0 ? 'text-green-600' : 'text-rose-600'} />
-                                                <InfoRow label="Delivered Date" value={formatDate(trackingData.delivered_at)} />
-                                            </div>
-                                            <button
-                                                onClick={() => handleViewTripSheet(trackingData.trip_sheets[0].id)}
-                                                className="w-full mt-1 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[11px] uppercase rounded-xl shadow-sm hover:shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <Truck size={14} /> View TripSheet / Inward Details
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
-                                            <div className="p-3 bg-amber-50 rounded-full border border-dashed border-amber-200"><Truck size={24} className="text-amber-300" /></div>
-                                            <div>
-                                                <p className="text-sm font-black text-gray-400 uppercase">No Trip Sheet Assigned</p>
-                                                <p className="text-xs text-gray-300 font-medium">This GC has not been dispatched yet.</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </SectionCard>
+                        {/* ── ROW 2: Transit History ── */}
+                        <SectionCard title="Transit History" icon={History} color="slate">
+                            <div className="p-4 bg-slate-50">
+                                {trackingData.transits?.length > 0 ? (
+                                    <div className="relative border-l-2 border-slate-200 ml-3 space-y-4 pb-2">
+                                        {trackingData.transits.map((transit, idx) => {
+                                            let dotColor = 'bg-slate-400';
+                                            let IconComponent = Package;
+                                            if (transit.status === 'BOOKED') { dotColor = 'bg-blue-500'; IconComponent = FileText; }
+                                            if (transit.status === 'DISPATCHED') { dotColor = 'bg-amber-500'; IconComponent = Truck; }
+                                            if (transit.status === 'INWARDED') { dotColor = 'bg-purple-500'; IconComponent = Package; }
+                                            if (transit.status === 'DELIVERED') { dotColor = 'bg-green-500'; IconComponent = CheckCircle; }
 
-
-
-                            {/* Inward / Ack Status */}
-                            <SectionCard title="Inward / Ack Status" icon={Package} color="purple">
-                                <div className="p-4 space-y-2.5">
-                                    {trackingData.inward_at ? (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Inward Branch</p>
-                                                    <p className="text-sm font-black text-purple-700 uppercase leading-tight">{trackingData.inward_branch?.branch_name || `Branch #${trackingData.inward_branch_id}`}</p>
-                                                </div>
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase border bg-teal-100 text-teal-700 border-teal-300">
-                                                    <span className="w-1 h-1 rounded-full bg-teal-500"></span> RECEIVED
-                                                </span>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-                                                <InfoRow label="Inward Branch" value={trackingData.inward_branch?.branch_name || `Branch #${trackingData.inward_branch_id}`} />
-                                                <InfoRow label="Inward Date" value={formatDate(trackingData.inward_at)} />
-                                                <InfoRow label="Inward Status" value="RECEIVED" accent="text-teal-600" />
-                                                <InfoRow label="Inward Time" value={new Date(trackingData.inward_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
-                                                <InfoRow label="Ack Report Bundle ID" value={trackingData.ack_bundle ? trackingData.ack_bundle.bundle_number : '—'} accent={trackingData.ack_bundle ? 'text-indigo-600 font-bold' : ''} />
-                                            </div>
-                                            {trackingData.ack_bundle && (
-                                                <div className="mt-2.5 p-2 bg-indigo-50 rounded-lg border border-indigo-100 flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <Archive size={12} className="text-indigo-500" />
-                                                        <div>
-                                                            <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest leading-none">ACK Bundle ID</p>
-                                                            <p className="text-[10px] font-black text-indigo-700 leading-tight">{trackingData.ack_bundle.bundle_number}</p>
+                                            return (
+                                                <div key={transit.id || idx} className="relative pl-6">
+                                                    {/* Dot */}
+                                                    <div className={`absolute -left-[11px] top-0 w-5 h-5 rounded-full ${dotColor} border-4 border-slate-50 flex items-center justify-center`}>
+                                                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                                                    </div>
+                                                    
+                                                    <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <IconComponent size={14} className={dotColor.replace('bg-', 'text-')} />
+                                                                <span className={`text-[10px] font-black uppercase tracking-widest ${dotColor.replace('bg-', 'text-')}`}>
+                                                                    {transit.status}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-slate-400">{formatDate(transit.created_at)} {new Date(transit.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                         </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest leading-none">Bundled On</p>
-                                                        <p className="text-[9px] font-bold text-indigo-600 leading-tight">{formatDate(trackingData.ack_bundle.bundle_date)}</p>
+                                                        
+                                                        <p className="text-xs font-bold text-slate-800">
+                                                            {transit.branch?.branch_name || `Branch #${transit.branch_id}`}
+                                                        </p>
+                                                        
+                                                        {transit.trip_sheet && (
+                                                            <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-100 flex justify-between items-center">
+                                                                <span className="text-[10px] font-bold text-slate-600">Trip: {transit.trip_sheet.trip_number}</span>
+                                                                <button
+                                                                    onClick={() => handleViewTripSheet(transit.trip_sheet.id)}
+                                                                    className="text-[9px] font-black text-blue-600 uppercase hover:underline"
+                                                                >
+                                                                    View Details
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {transit.remarks && (
+                                                            <p className="mt-1 text-[10px] text-slate-500 italic">{transit.remarks}</p>
+                                                        )}
                                                     </div>
                                                 </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center py-6 text-center gap-1.5">
-                                            <div className="p-2.5 bg-purple-50 rounded-full border border-dashed border-purple-200"><Package size={20} className="text-purple-300" /></div>
-                                            <div>
-                                                <p className="text-xs font-black text-gray-400 uppercase">Not Yet Inwarded</p>
-                                                <p className="text-[10px] text-gray-300 font-medium">Shipment hasn't arrived at destination branch.</p>
-                                            </div>
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase border bg-amber-100 text-amber-700 border-amber-300">
-                                                <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse"></span> IN-TRANSIT
-                                            </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+                                        <div className="p-3 bg-slate-100 rounded-full border border-dashed border-slate-200"><History size={24} className="text-slate-300" /></div>
+                                        <div>
+                                            <p className="text-sm font-black text-slate-400 uppercase">No Transit History</p>
+                                            <p className="text-xs text-slate-300 font-medium">Tracking data is not available for this GC. Older GCs might not have transit history recorded.</p>
                                         </div>
-                                    )}
-                                </div>
-                            </SectionCard>
-                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </SectionCard>
 
                         {/* ── Article Info Table ── */}
                         <SectionCard title="Article Info" icon={Box} color="slate">
@@ -922,23 +888,113 @@ function GCTracking() {
                                                         <th className="border-r border-gray-200 px-3 py-1.5">Vehicle No</th>
                                                         <th className="border-r border-gray-200 px-3 py-1.5">Driver Name</th>
                                                         <th className="border-r border-gray-200 px-3 py-1.5">Status</th>
-                                                        <th className="border-r border-gray-200 px-3 py-1.5">Delivery Date</th>
+                                                        <th className="border-r border-gray-200 px-3 py-1.5">Expected Delivery Date</th>
                                                         <th className="px-3 py-1.5">Remarks</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <tr className="hover:bg-slate-50 transition-colors">
-                                                        <td className="border-r border-gray-200 px-3 py-2 uppercase font-bold">{trackingData.origin_branch?.branch_name}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2 uppercase">{trackingData.account_type || 'NORMAL'}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2">{formatDate(trackingData.inward_at)}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2">{formatDate(selectedTripFullData.trip_date)}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2 text-blue-700 font-black">{selectedTripFullData.trip_number}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2 uppercase">{selectedTripFullData.vehicle?.vehicle_number}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2 uppercase">{selectedTripFullData.driver?.name}</td>
-                                                        <td className="border-r border-gray-200 px-3 py-2"><StatusBadge status={trackingData.status} /></td>
-                                                        <td className="border-r border-gray-200 px-3 py-2">{formatDate(trackingData.delivered_at)}</td>
-                                                        <td className="px-3 py-2 text-gray-400 italic font-normal">{trackingData.remarks || '—'}</td>
-                                                    </tr>
+                                                    {trackingData && (() => {
+                                                        const originTripSheet = trackingData.trip_sheets?.find(ts => 
+                                                            Number(ts.dispatch_branch_id) === Number(trackingData.origin_branch_id)
+                                                        ) || (
+                                                            Number(selectedTripFullData?.dispatch_branch_id) === Number(trackingData.origin_branch_id)
+                                                                ? selectedTripFullData
+                                                                : null
+                                                        ) || trackingData.trip_sheets?.[0];
+                                                        
+                                                        const firstDispatchDate = originTripSheet?.trip_date || originTripSheet?.dispatch_date || null;
+                                                        const firstTripNo = originTripSheet?.trip_number || '—';
+                                                        const firstVehicleNo = originTripSheet?.vehicle?.vehicle_number || '—';
+                                                        const firstDriverName = originTripSheet?.driver?.name || '—';
+                                                        
+                                                        const nextInwardDate = trackingData.transits && trackingData.transits.length > 0 
+                                                            ? (['INWARDED', 'RECEIVED'].includes(trackingData.transits[0].status) 
+                                                                ? trackingData.transits[0].created_at 
+                                                                : (trackingData.inward_at || trackingData.transits[0].created_at))
+                                                            : trackingData.inward_at;
+                                                        
+                                                        return (
+                                                            <tr className="hover:bg-slate-50 transition-colors">
+                                                                <td className="border-r border-gray-200 px-3 py-2 uppercase font-bold">{trackingData.origin_branch?.branch_name}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2 uppercase">{trackingData.account_type || 'NORMAL'}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2">{formatDate(trackingData.created_at)}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2">{formatDate(firstDispatchDate)}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2 text-blue-700 font-black">{firstTripNo}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2 uppercase">{firstVehicleNo}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2 uppercase">{firstDriverName}</td>
+                                                                <td className="border-r border-gray-200 px-3 py-2">
+                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-gray-100 text-gray-700 border border-gray-200">
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-gray-500"></div>
+                                                                        BOOKED
+                                                                    </span>
+                                                                </td>
+                                                                <td className="border-r border-gray-200 px-3 py-2">{formatDate(nextInwardDate)}</td>
+                                                                <td className="px-3 py-2 text-gray-400 italic font-normal">Consignment Booked</td>
+                                                            </tr>
+                                                        );
+                                                    })()}
+                                                    {(() => {
+                                                        if (!trackingData.transits || trackingData.transits.length === 0) {
+                                                            return (
+                                                                <tr className="hover:bg-slate-50 transition-colors">
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase font-bold">{trackingData.origin_branch?.branch_name}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{trackingData.account_type || 'NORMAL'}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{formatDate(trackingData.inward_at)}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{formatDate(selectedTripFullData?.trip_date)}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 text-blue-700 font-black">{selectedTripFullData?.trip_number}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{selectedTripFullData?.vehicle?.vehicle_number}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{selectedTripFullData?.driver?.name}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2"><StatusBadge status={trackingData.status} /></td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{formatDate(trackingData.delivered_at || trackingData.inward_at)}</td>
+                                                                    <td className="px-3 py-2 text-gray-400 italic font-normal">{trackingData.remarks || '—'}</td>
+                                                                </tr>
+                                                            );
+                                                        }
+
+                                                        const transitsToRender = [];
+                                                        trackingData.transits.forEach(transit => {
+                                                            const isDelivered = ['DELIVERED', 'Delivered'].includes(transit.status);
+                                                            if (isDelivered && transitsToRender.length > 0) {
+                                                                const lastT = transitsToRender[transitsToRender.length - 1];
+                                                                const lastBranchName = lastT.branch?.branch_name || trackingData.origin_branch?.branch_name;
+                                                                const currentBranchName = transit.branch?.branch_name || trackingData.origin_branch?.branch_name;
+                                                                
+                                                                if (lastBranchName === currentBranchName) {
+                                                                    lastT.display_status = 'DELIVERED';
+                                                                    if (transit.remarks) lastT.display_remarks = transit.remarks;
+                                                                    lastT.delivered_at_override = transit.created_at;
+                                                                    return;
+                                                                }
+                                                            }
+                                                            transitsToRender.push({ ...transit, display_status: transit.status, display_remarks: transit.remarks });
+                                                        });
+
+                                                        return transitsToRender.map((transit, idx) => {
+                                                            const nextTransit = transitsToRender[idx + 1];
+                                                            const expectedDelDate = nextTransit 
+                                                                ? (['INWARDED', 'RECEIVED'].includes(nextTransit.status) 
+                                                                    ? nextTransit.created_at 
+                                                                    : (trackingData.inward_at || nextTransit.created_at))
+                                                                : (['DELIVERED', 'Delivered'].includes(transit.display_status) || ['DELIVERED', 'Delivered'].includes(trackingData.status)
+                                                                    ? (transit.delivered_at_override || trackingData.delivered_at)
+                                                                    : null);
+                                                                    
+                                                            return (
+                                                                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase font-bold">{transit.branch?.branch_name || trackingData.origin_branch?.branch_name}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{trackingData.account_type || 'NORMAL'}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{['INWARDED', 'RECEIVED'].includes(transit.status) ? formatDate(transit.created_at) : (formatDate(trackingData.inward_at || trackingData.created_at) || '—')}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{['DISPATCHED', 'LOCAL_TRIP'].includes(transit.status) ? formatDate(transit.created_at) : (formatDate(transit.trip_sheet?.trip_date || (transit.trip_sheet_id == selectedTripFullData?.id ? selectedTripFullData?.trip_date : null)) || '—')}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 text-blue-700 font-black">{transit.trip_sheet?.trip_number || (transit.trip_sheet_id == selectedTripFullData?.id ? selectedTripFullData?.trip_number : '—')}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{transit.trip_sheet?.vehicle?.vehicle_number || (transit.trip_sheet_id == selectedTripFullData?.id ? selectedTripFullData?.vehicle?.vehicle_number : '—')}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2 uppercase">{transit.trip_sheet?.driver?.name || (transit.trip_sheet_id == selectedTripFullData?.id ? selectedTripFullData?.driver?.name : '—')}</td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2"><StatusBadge status={transit.display_status} /></td>
+                                                                    <td className="border-r border-gray-200 px-3 py-2">{formatDate(expectedDelDate)}</td>
+                                                                    <td className="px-3 py-2 text-gray-400 italic font-normal">{transit.display_remarks || transit.remarks || '—'}</td>
+                                                                </tr>
+                                                            );
+                                                        });
+                                                    })()}
                                                 </tbody>
                                             </table>
                                         </div>

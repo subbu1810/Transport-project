@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Printer, FileText, ShieldCheck, Download } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api'
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 function GCFormatPrint() {
     const [companyDetails, setCompanyDetails] = useState(null)
@@ -14,7 +15,7 @@ function GCFormatPrint() {
         if (userDataRaw) {
             try {
                 const user = JSON.parse(userDataRaw)
-                setCompanyDetails({
+                setCompanyDetails(applyBranchOverrides(user, {
                     company_name: user.transport_name || user.branch?.branch_name || 'Transport Logistics',
                     address: user.transport_address || user.branch?.branch_address || '',
                     phone: user.transport_phone || user.branch?.branch_phone || '',
@@ -23,7 +24,7 @@ function GCFormatPrint() {
                     gstin: user.transport_gstin || user.gstin || user.gst_number || '',
                     logo_path: user.transport_logo_url || null,
                     upi_qr_path: user.upi_qr_url || null
-                })
+                }))
             } catch (e) {
                 console.error("Error parsing user data", e)
             }
@@ -64,7 +65,10 @@ function GCFormatPrint() {
                 return (res.status === 'fulfilled') ? res.value.data : null;
             };
 
-            setCompanyDetails(prev => ({
+            const userDataRaw = localStorage.getItem('user') || localStorage.getItem('admin')
+            const user = userDataRaw ? JSON.parse(userDataRaw) : null;
+            
+            setCompanyDetails(prev => applyBranchOverrides(user, {
                 ...prev,
                 logo_path: prev?.logo_path || getVal(0),
                 upi_qr_path: prev?.upi_qr_path || getVal(1),

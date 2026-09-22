@@ -187,6 +187,13 @@ function WayBillAdminEdit() {
           return;
         }
 
+        // Check if payment is done for ACCOUNT type waybills
+        if (waybill.account_type?.toUpperCase() === 'ACCOUNT' && parseFloat(waybill.amount_paid) > 0) {
+          setError(`ACCESS DENIED: Payment (₹${waybill.amount_paid}) has already been recorded against this Account GC. Modification is not allowed.`);
+          setWaybillId(null);
+          return;
+        }
+
         setSuccess('GC: ' + gcNumber + ' Loaded. Enter Modify details below.')
       } else {
         setError(response.data.message || 'GC Number not found.')

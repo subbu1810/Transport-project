@@ -337,7 +337,7 @@ function ConsignorHistoryReport() {
       trunc(wb.destination?.city_name || 'N/A', 16), // max 16 chars
       wb.total_articles,
       parseFloat(wb.actual_weight    || 0).toFixed(2),
-      parseFloat(wb.articles?.[0]?.freight || 0).toFixed(2),  // Freight per Kg (articles[0].freight)
+      (parseInt(wb.total_articles) > 0 ? (parseFloat(wb.freight_amount || 0) / parseInt(wb.total_articles)).toFixed(2) : '0.00'),  // Rate = freight / articles
       parseFloat(wb.freight_amount   || 0).toFixed(2),
       parseFloat(wb.dd_charges       || 0).toFixed(2),
       parseFloat(wb.handling_charges || 0).toFixed(2),
@@ -841,7 +841,7 @@ function ConsignorHistoryReport() {
                   <td className="px-3 py-2 text-center text-gray-600 italic">{wb.actual_weight || 0} Kg</td>
                   <td className="px-3 py-2 text-gray-400 italic text-[10px] max-w-[150px] truncate" title={wb.article_desc}>{wb.article_desc || '---'}</td>
                   <td className="px-3 py-2 text-right text-gray-900 font-bold">
-                    ₹{parseFloat(wb.articles?.[0]?.rate || (wb.total_articles > 0 ? (wb.freight_amount / wb.total_articles) : 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{(wb.total_articles > 0 ? (parseFloat(wb.freight_amount || 0) / parseInt(wb.total_articles)) : 0).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right text-gray-600">₹{parseFloat(wb.freight_amount || 0).toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-gray-600">₹{parseFloat(wb.dd_charges || 0).toLocaleString()}</td>

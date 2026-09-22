@@ -139,6 +139,8 @@ class ComposerStaticInite2b9671d273e6f257906e86a908cf03c
         ),
         'I' =>
         array (
+            'Intervention\\Image\\' => 19,
+            'Intervention\\Gif\\' => 17,
             'Illuminate\\Support\\' => 19,
             'Illuminate\\' => 11,
         ),
@@ -448,6 +450,14 @@ class ComposerStaticInite2b9671d273e6f257906e86a908cf03c
         'Laravel\\Prompts\\' =>
         array (
             0 => __DIR__ . '/..' . '/laravel/prompts/src',
+        ),
+        'Intervention\\Image\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/intervention/image/src',
+        ),
+        'Intervention\\Gif\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/intervention/gif/src',
         ),
         'Illuminate\\Support\\' =>
         array (

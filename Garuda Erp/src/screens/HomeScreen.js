@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import api, { API_URL } from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 const STORAGE_URL = API_URL.replace('/api/v1', '/storage');
 

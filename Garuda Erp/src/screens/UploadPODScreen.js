@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function UploadPODScreen({ navigation }) {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -39,7 +40,7 @@ export default function UploadPODScreen({ navigation }) {
         Alert.alert('Error', response.data.message || 'GC not found');
       }
     } catch (error) {
-      Alert.alert('Error', 'Connection failed or GC not found.');
+      Alert.alert('Error', getErrorMessage(error, 'Connection failed or GC not found.'));
     } finally {
       setLoading(false);
     }
@@ -138,7 +139,7 @@ export default function UploadPODScreen({ navigation }) {
         Alert.alert('Error', response.data.message || 'Failed to upload POD');
       }
     } catch (error) {
-      Alert.alert('Error', 'Upload failed. Please check your internet connection.');
+      Alert.alert('Error', getErrorMessage(error, 'Upload failed. Please check your internet connection.'));
       console.error(error);
     } finally {
       setUploading(false);

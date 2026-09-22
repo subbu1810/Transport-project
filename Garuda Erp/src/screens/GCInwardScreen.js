@@ -8,6 +8,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function GCInwardScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -88,7 +89,7 @@ export default function GCInwardScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', `Failed to verify GC ${uppercaseGC}.`);
+      Alert.alert('Error', getErrorMessage(error, `Failed to verify GC ${uppercaseGC}.`));
     } finally {
       setLoadingGC(false);
     }
@@ -135,7 +136,7 @@ export default function GCInwardScreen({ navigation }) {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'An error occurred while submitting. Please try again.');
+      Alert.alert('Error', getErrorMessage(error, 'An error occurred while submitting. Please try again.'));
     } finally {
       setSubmitting(false);
     }

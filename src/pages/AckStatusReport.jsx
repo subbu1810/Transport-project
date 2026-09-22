@@ -3,6 +3,7 @@ import { Search, Printer, FileText, Filter, Calendar, MapPin, Loader2, Download,
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 function AckStatusReport() {
   const [filters, setFilters] = useState({
@@ -85,6 +86,9 @@ function AckStatusReport() {
     XLSX.writeFile(wb, `ACK_STATUS_REPORT.xlsx`)
   }
 
+  const currentUser = JSON.parse(localStorage.getItem('user')) || {};
+  const overrides = applyBranchOverrides(currentUser, { company_name: 'Garuda Transport System.' });
+
   return (
     <div className="bg-gray-50 min-h-screen text-[11px]">
       
@@ -124,7 +128,7 @@ function AckStatusReport() {
          <div className="hidden print:block mb-8 border-b-4 border-slate-900 pb-6">
             <div className="flex justify-between items-start">
                <div>
-                  <h1 className="text-3xl font-black text-slate-900 leading-none uppercase tracking-tighter">Garuda Transport System.</h1>
+                  <h1 className="text-3xl font-black text-slate-900 leading-none uppercase tracking-tighter">{overrides.company_name}</h1>
                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-2">Logistics Excellence & Total Audit Control</p>
                   <div className="flex gap-10 mt-6">
                      <div className="flex flex-col">

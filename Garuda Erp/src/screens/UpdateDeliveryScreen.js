@@ -8,6 +8,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 const DELIVERABLE_STATUSES = ['BOOKED', 'PENDING', 'DISPATCHED', 'RECEIVED', 'INWARDED', 'LOCAL_TRIP', 'Arrived at Destination', 'Out for Delivery'];
 
@@ -75,7 +76,7 @@ export default function UpdateDeliveryScreen({ navigation }) {
   const handleSearch = async (searchGcNumber = gcNumber) => {
     const numToSearch = (typeof searchGcNumber === 'string' ? searchGcNumber : gcNumber).trim().toUpperCase();
     if (!numToSearch) {
-      Alert.alert('Error', 'Please enter a GC Number');
+      Alert.alert('Error', getErrorMessage(error, 'Please enter a GC Number'));
       return;
     }
     
@@ -146,7 +147,7 @@ export default function UpdateDeliveryScreen({ navigation }) {
         Alert.alert('Error', response.data.message || 'GC not found');
       }
     } catch (error) {
-      Alert.alert('Error', 'Connection failed');
+      Alert.alert('Error', getErrorMessage(error, 'Connection failed'));
     } finally {
       setLoading(false);
     }
@@ -234,7 +235,7 @@ export default function UpdateDeliveryScreen({ navigation }) {
         Alert.alert('Error', response.data.message || 'Failed to update delivery status');
       }
     } catch (error) {
-      Alert.alert('Error', 'Connection failed. Please check your internet connection.');
+      Alert.alert('Error', getErrorMessage(error, 'Connection failed. Please check your internet connection.'));
     } finally {
       setUpdating(false);
     }

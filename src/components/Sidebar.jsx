@@ -5,7 +5,7 @@ import {
   LayoutDashboard,
   Settings,
   FileText,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   Truck,
   Package,
@@ -27,7 +27,8 @@ import {
   Printer,
   Fuel,
   Headphones,
-  Database
+  Database,
+  QrCode
 } from 'lucide-react'
 
 import { API_BASE_URL } from '../config/api'
@@ -129,11 +130,11 @@ function Sidebar({ isOpen, onToggle }) {
     },
     {
       label: 'Accounts',
-      icon: DollarSign,
+      icon: IndianRupee,
       submenu: [
-        { label: 'Head Details', path: '/head-details', icon: DollarSign },
-        { label: 'Cash Book Details', path: '/cash-book-details', icon: DollarSign },
-        { label: 'Cash Book Report', path: '/cash-book-report', icon: DollarSign },
+        { label: 'Head Details', path: '/head-details', icon: IndianRupee },
+        { label: 'Cash Book Details', path: '/cash-book-details', icon: IndianRupee },
+        { label: 'Cash Book Report', path: '/cash-book-report', icon: IndianRupee },
         { label: 'Maintenance Billing', path: '/maintenance-billing', icon: CreditCard },
       ]
     },
@@ -236,6 +237,7 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Change Password', path: '/change-password', icon: Settings },
         { label: 'GC Format Print/Download', path: '/gc-format-print', icon: Printer },
         { label: 'Backup Options', path: '/backup-options', icon: Database },
+        { label: 'Mobile App QR Setup', path: '/mobile-app-qr', icon: QrCode },
       ]
     },
     {
@@ -257,8 +259,9 @@ function Sidebar({ isOpen, onToggle }) {
 
           // For regular admin, filter submenus based on assignments
           if (item.submenu) {
+            const alwaysVisible = ['/change-password', '/backup-options', '/mobile-app-qr', '/app-workflow']
             const visibleSubmenus = item.submenu.filter(sub =>
-              allowedScreens.includes(sub.path) || sub.path === '/change-password'
+              allowedScreens.includes(sub.path) || alwaysVisible.includes(sub.path)
             )
             if (visibleSubmenus.length === 0) return null
             return { ...item, submenu: visibleSubmenus }

@@ -17,6 +17,21 @@ class CashBookEntryController extends Controller
     {
         $query = CashBookEntry::with(['accountHead', 'branch']);
 
+        // Date Filter (ALWAYS apply if present)
+        if ($request->filled('from_date') && $request->filled('to_date')) {
+            $query->whereBetween('transaction_date', [$request->from_date, $request->to_date]);
+        } elseif ($request->filled('date')) {
+            $query->where('transaction_date', $request->date);
+        }
+
+        // Branch Filter
+        if ($request->filled('branch_id')) {
+            if ($request->branch_id !== 'All Branches' && $request->branch_id !== 'All') {
+                $query->where('branch_id', $request->branch_id);
+            }
+        }
+
+        // Search Filter (applied within the date range)
         if ($request->has('search') && !empty($request->search)) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
@@ -26,26 +41,59 @@ class CashBookEntryController extends Controller
                       $qh->where('name', 'like', "%$search%");
                   });
             });
-            // When searching, we ignore the date filters so the user can find the record across all time.
-        } else {
-            if ($request->filled('from_date') && $request->filled('to_date')) {
-                $query->whereBetween('transaction_date', [$request->from_date, $request->to_date]);
-            } elseif ($request->filled('date')) {
-                $query->where('transaction_date', $request->date);
-            }
         }
 
-        if ($request->filled('branch_id')) {
-            if ($request->branch_id !== 'All Branches' && $request->branch_id !== 'All') {
-                $query->where('branch_id', $request->branch_id);
-            }
+        // Grand Totals for the entire filtered query
+        $totalCredits = (clone $query)->where('transaction_type', 'CREDIT')->where('is_closing_entry', false)->sum('amount');
+        $totalDebits = (clone $query)->where('transaction_type', 'DEBIT')->where('is_closing_entry', false)->sum('amount');
+
+        // Pagination
+        $perPage = $request->get('per_page', 1000000); // Default to a large number to preserve backwards compatibility for reports if they don't pass per_page
+        $page = $request->get('page', 1);
+        $paginator = $query->orderBy('transaction_date', 'asc')->orderBy('id', 'asc')->paginate($perPage);
+        $entries = $paginator->items();
+
+        // Calculate running balance offset (balance from previous pages in this query)
+        $previousBalance = 0;
+        $offset = ($page - 1) * $perPage;
+        if ($offset > 0) {
+            $subQuery = clone $query;
+            $subQuery->orderBy('transaction_date', 'asc')->orderBy('id', 'asc')
+                     ->select('amount', 'transaction_type')->limit($offset);
+            
+            $previousBalance = \DB::table(\DB::raw("({$subQuery->toSql()}) as sub"))
+                ->mergeBindings($subQuery->getQuery())
+                ->selectRaw("SUM(CASE WHEN transaction_type = 'CREDIT' THEN amount ELSE -amount END) as balance")
+                ->value('balance') ?? 0;
         }
 
-        $entries = $query->orderBy('transaction_date', 'asc')->orderBy('id', 'asc')->get();
+        // Calculate running balance per row
+        $currentBalance = $previousBalance;
+        foreach ($entries as $entry) {
+            if ($entry->transaction_type === 'CREDIT') {
+                $currentBalance += $entry->amount;
+            } else {
+                $currentBalance -= $entry->amount;
+            }
+            $entry->running_balance = $currentBalance;
+        }
 
         return response()->json([
             'success' => true,
-            'data' => $entries
+            'data' => $entries, // return entries directly in data to avoid breaking reports temporarily if they don't expect pagination structure, wait!
+            // To properly support pagination without breaking older endpoints that just expect an array:
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ],
+            'totals' => [
+                'credit' => $totalCredits,
+                'debit' => $totalDebits,
+                'balance' => $totalCredits - $totalDebits
+            ],
+            'previous_balance' => $previousBalance
         ]);
     }
 
@@ -199,8 +247,9 @@ class CashBookEntryController extends Controller
             ], 422);
         }
 
-        $query = CashBookEntry::with('accountHead')
-            ->whereBetween('transaction_date', [$request->from_date, $request->to_date]);
+        $query = CashBookEntry::with(['accountHead', 'branch'])
+            ->whereBetween('transaction_date', [$request->from_date, $request->to_date])
+            ->orderBy('transaction_date', 'asc');
 
         if ($request->filled('branch_id')) {
             $query->where('branch_id', $request->branch_id);
@@ -233,7 +282,8 @@ class CashBookEntryController extends Controller
             'success' => true,
             'data' => [
                 'report' => $reportData,
-                'totals' => $totals
+                'totals' => $totals,
+                'entries' => $entries
             ]
         ]);
     }

@@ -8,6 +8,7 @@ import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function CashBookEntryScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -55,7 +56,7 @@ export default function CashBookEntryScreen({ navigation }) {
       if (userData) {
         const currentUser = JSON.parse(userData);
         setUser(currentUser);
-        setSelectedBranchId(currentUser.branch_id || 'ALL');
+        setSelectedBranchId(currentUser.role === 'superadmin' ? 'ALL' : (currentUser.branch_id ? currentUser.branch_id.toString() : 'ALL'));
       }
 
       const response = await api.get('/branches');
@@ -159,7 +160,7 @@ export default function CashBookEntryScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Save error:', error);
-      Alert.alert('Error', 'Failed to communicate with server.');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to communicate with server.'));
     } finally {
       setSaving(false);
     }
@@ -179,7 +180,7 @@ export default function CashBookEntryScreen({ navigation }) {
             }
           } catch (error) {
             console.error('Delete error:', error);
-            Alert.alert('Error', 'Failed to communicate with server.');
+            Alert.alert('Error', getErrorMessage(error, 'Failed to communicate with server.'));
           }
       }}
     ]);

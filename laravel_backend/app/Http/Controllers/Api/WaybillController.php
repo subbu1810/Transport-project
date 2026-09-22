@@ -229,7 +229,7 @@ class WaybillController extends Controller
 
             // Maintenance Validation: Block operations if overdue bills
             $today = now();
-            if ($today->day > 5) {
+            if ($today->day > 10) {
                 // Check if branch has an unpaid bill for PREVIOUS months
                 $hasOverdueBill = \App\Models\MaintenanceBill::where('branch_id', $validated['origin_branch_id'])
                     ->where('status', 'Pending')
@@ -298,6 +298,13 @@ class WaybillController extends Controller
             foreach ($validated['articles'] as $articleData) {
                 $waybill->articles()->create($articleData);
             }
+
+            \App\Models\WaybillTransit::create([
+                'waybill_id' => $waybill->id,
+                'branch_id' => $validated['origin_branch_id'],
+                'status' => 'BOOKED',
+                'remarks' => 'Waybill Booked',
+            ]);
 
             // Automatically create Cash Book Entry for 'Paid' GC at Booking Branch
             if ($isPaidImmediately) {
@@ -397,7 +404,11 @@ class WaybillController extends Controller
                 'tripSheets.driver',
                 'ackBundle',
                 'deliveryAttempts',
-                'consignorReceipts'
+                'consignorReceipts',
+                'transits.branch',
+                'transits.tripSheet',
+                'transits.tripSheet.vehicle',
+                'transits.tripSheet.driver'
             ])
                 ->where('gc_number', $gcNumber)
                 ->first();
@@ -534,57 +545,61 @@ class WaybillController extends Controller
             $newGrandTotal = (float) $waybill->grand_total;
             $oldAmountPaid = (float) $oldAmountPaidVal;
 
+            $waybill->load('consignor');
+
             if ($newAccountType === 'paid') {
                 $delta = $newGrandTotal - $oldAmountPaid;
-                if (abs($delta) > 0.01) {
+                
+                // Only create adjustment entries if the amount was previously received
+                if ($oldAmountPaid > 0 && abs($delta) > 0.01) {
                     $waybill->amount_paid = $newGrandTotal;
                     $waybill->save();
 
-                    // 1. Automatically record the payment (or adjustment) in Cash Book
-                    // CashBookEntry::create([
-                    //     'voucher_no' => 'BKADJ-' . strtoupper(substr(uniqid(), -6)),
-                    //     'transaction_date' => $waybill->bill_date,
-                    //     'transaction_type' => $delta > 0 ? 'CREDIT' : 'DEBIT',
-                    //     'account_head_id' => $this->getBookingAccountHeadId(),
-                    //     'amount' => abs($delta),
-                    //     'branch_id' => $waybill->origin_branch_id,
-                    //     'paid_to_receive_from' => $waybill->consignor->name ?? 'Consignor',
-                    //     'mode_of_pay' => 'CASH',
-                    //     'remarks' => ($delta > 0 ? "Payment adjustment" : "Refund/Reversal") . " for GC: {$waybill->gc_number} (Modified during Edit)",
-                    //     'authorised_by' => 'System Auto',
-                    //     'paid_by_received_by' => 'Booking Clerk',
-                    //     'is_closing_entry' => false
-                    // ]);
+                    // 1. Post adjustment entry to Cash Book (CREDIT if amount increased, DEBIT if decreased/refund)
+                    CashBookEntry::create([
+                        'voucher_no'          => 'BKADJ-' . strtoupper(substr(uniqid(), -6)),
+                        'transaction_date'    => date('Y-m-d'),
+                        'transaction_type'    => $delta > 0 ? 'CREDIT' : 'DEBIT',
+                        'account_head_id'     => $this->getBookingAccountHeadId(),
+                        'amount'              => abs($delta),
+                        'branch_id'           => $waybill->origin_branch_id,
+                        'paid_to_receive_from'=> $waybill->consignor->name ?? 'Consignor',
+                        'mode_of_pay'         => 'CASH',
+                        'remarks'             => ($delta > 0 ? 'Amount Adjustment (Extra Collected)' : 'Amount Adjustment (Refund/Reversal)') . " for GC: {$waybill->gc_number} | Old: ₹{$oldAmountPaid} → New: ₹{$newGrandTotal}",
+                        'authorised_by'       => 'System Auto',
+                        'paid_by_received_by' => 'System (GC Edit)',
+                        'is_closing_entry'    => false,
+                    ]);
 
                     // 2. Create detailed payment record for tracking WHO and WHEN
                     WaybillPayment::create([
-                        'waybill_id' => $waybill->id,
-                        'paid_amount' => $delta, // Can be negative for refunds
-                        'discount' => 0,
+                        'waybill_id'   => $waybill->id,
+                        'paid_amount'  => $delta, // Can be negative for refunds
+                        'discount'     => 0,
                         'payment_date' => date('Y-m-d'),
-                        'mode_of_pay' => 'CASH',
-                        'remarks' => $delta > 0 ? "Additional collection via Edit" : "Refund adjustment via Edit",
-                        'branch_id' => $waybill->origin_branch_id,
-                        'created_by' => auth()->id() ?? 1,
+                        'mode_of_pay'  => 'CASH',
+                        'remarks'      => $delta > 0 ? "Additional collection via Edit" : "Refund adjustment via Edit",
+                        'branch_id'    => $waybill->origin_branch_id,
+                        'created_by'   => auth()->id() ?? 1,
                     ]);
                 }
             } elseif (($oldAccountTypeVal ?? '') === 'paid' && $newAccountType !== 'paid') {
-                // If it was PAID but changed to something else (e.g. TOPAY), we should probably reverse the payment
+                // GC was PAID but type changed to ToPay/Account — reverse the entire collected amount
                 if ($oldAmountPaid > 0) {
-                    // CashBookEntry::create([
-                    //     'voucher_no' => 'BKREV-' . strtoupper(substr(uniqid(), -6)),
-                    //     'transaction_date' => date('Y-m-d'),
-                    //     'transaction_type' => 'DEBIT',
-                    //     'account_head_id' => $this->getBookingAccountHeadId(),
-                    //     'amount' => $oldAmountPaid,
-                    //     'branch_id' => $waybill->origin_branch_id,
-                    //     'paid_to_receive_from' => $waybill->consignor->name ?? 'Consignor',
-                    //     'mode_of_pay' => 'CASH',
-                    //     'remarks' => "REVERSAL: GC payment mode changed from PAID to " . strtoupper($newAccountType) . " ({$waybill->gc_number})",
-                    //     'authorised_by' => 'System Auto',
-                    //     'paid_by_received_by' => 'System',
-                    //     'is_closing_entry' => false
-                    // ]);
+                    CashBookEntry::create([
+                        'voucher_no'          => 'BKREV-' . strtoupper(substr(uniqid(), -6)),
+                        'transaction_date'    => date('Y-m-d'),
+                        'transaction_type'    => 'DEBIT',
+                        'account_head_id'     => $this->getBookingAccountHeadId(),
+                        'amount'              => $oldAmountPaid,
+                        'branch_id'           => $waybill->origin_branch_id,
+                        'paid_to_receive_from'=> $waybill->consignor->name ?? 'Consignor',
+                        'mode_of_pay'         => 'CASH',
+                        'remarks'             => "REVERSAL: GC {$waybill->gc_number} changed from PAID → " . strtoupper($newAccountType) . " | Reversed ₹{$oldAmountPaid}",
+                        'authorised_by'       => 'System Auto',
+                        'paid_by_received_by' => 'System (GC Edit)',
+                        'is_closing_entry'    => false,
+                    ]);
                     $waybill->amount_paid = 0;
                     $waybill->save();
                 }
@@ -719,14 +734,27 @@ class WaybillController extends Controller
                 }
             }
 
+            // Fallback: If it was never inwarded, set inward details to current delivery event
+            $inwardAt = $waybill->inward_at ?? now();
+            $inwardBranchId = $waybill->inward_branch_id ?? $ackBranchId;
+
             // Update status to DELIVERED and set deliver_status to ACK_RECEIVED
             $waybill->update([
                 'status' => 'DELIVERED',
                 'deliver_status' => 'ACK_RECEIVED',
                 'delivered_at' => $waybill->delivered_at ?? now(),
                 'delivered_branch_id' => $ackBranchId,
+                'inward_at' => $inwardAt,
+                'inward_branch_id' => $inwardBranchId,
                 'remarks' => $validated['remarks'] ?? $waybill->remarks,
                 'delivery_proof' => $waybill->delivery_proof
+            ]);
+
+            \App\Models\WaybillTransit::create([
+                'waybill_id' => $waybill->id,
+                'branch_id' => $ackBranchId,
+                'status' => 'DELIVERED',
+                'remarks' => 'GC marked as DELIVERED and acknowledgment received',
             ]);
 
             return response()->json([
@@ -763,6 +791,10 @@ class WaybillController extends Controller
             $inwardAt = $validated['received_date'] ? date('Y-m-d H:i:s', strtotime($validated['received_date'] . ' ' . date('H:i:s'))) : now();
 
             foreach ($waybills as $waybill) {
+                if (in_array($waybill->status, ['INWARDED', 'DELIVERED', 'Out for Delivery', 'Arrived at Destination'])) {
+                    throw new \Exception("GC {$waybill->gc_number} is already {$waybill->status} and cannot be inwarded again.");
+                }
+
                 $oldValues = $waybill->toArray();
 
                 $waybill->update([
@@ -771,6 +803,13 @@ class WaybillController extends Controller
                     'inward_at' => $inwardAt,
                     'remarks' => $validated['remarks'] ?: "Inwarded at destination branch",
                     'inward_by' => $validated['inward_by'] ?? null,
+                ]);
+
+                \App\Models\WaybillTransit::create([
+                    'waybill_id' => $waybill->id,
+                    'branch_id' => $validated['received_branch_id'],
+                    'status' => 'INWARDED',
+                    'remarks' => $validated['remarks'] ?: "GC Inwarded at destination branch",
                 ]);
 
                 AuditLog::record(
@@ -972,6 +1011,14 @@ class WaybillController extends Controller
                 $waybill->deliver_status = 'DELIVERED';
                 $waybill->delivered_at = now();
 
+                // Fallback: If it was never inwarded, set inward details to current delivery event
+                if (!$waybill->inward_at) {
+                    $waybill->inward_at = now();
+                }
+                if (!$waybill->inward_branch_id) {
+                    $waybill->inward_branch_id = $request->delivered_branch_id ?? $waybill->destination_id;
+                }
+
                 if ($request->has('delivered_branch_id')) {
                     $waybill->delivered_branch_id = $request->delivered_branch_id;
                 }
@@ -979,6 +1026,13 @@ class WaybillController extends Controller
                 if ($request->has('delivered_branch_name')) {
                     $waybill->delivered_branch_name = $request->delivered_branch_name;
                 }
+
+                \App\Models\WaybillTransit::create([
+                    'waybill_id' => $waybill->id,
+                    'branch_id' => $waybill->delivered_branch_id ?? 1,
+                    'status' => 'DELIVERED',
+                    'remarks' => 'GC Delivered to consignee',
+                ]);
 
                 // If it's a 'topay' GC AND cash was explicitly confirmed as received at delivery
                 if ($waybill->account_type === 'topay' && $request->input('cash_received') === 'true') {
@@ -1155,6 +1209,9 @@ class WaybillController extends Controller
             if ($request->filled('inward_branch_id')) {
                 $query->where('inward_branch_id', $request->inward_branch_id);
             }
+            
+            // Exclude local bookings (where booking branch is the same as inward branch)
+            $query->whereColumn('origin_branch_id', '!=', 'inward_branch_id');
 
             // Inward Date Range Filter
             // If dates are provided, we should only look at records WHERE inward_at is NOT NULL
@@ -1165,13 +1222,19 @@ class WaybillController extends Controller
                 $query->whereDate('inward_at', '<=', $request->to_date);
             }
 
-            // Strictly show only items that have arrived at the destination warehouse
-            // (Exclude items that are only Booked or currently Dispatched in transit)
-            $query->whereNotIn('status', ['Booked', 'Dispatched']);
+            // Show ALL GCs that have ever been inwarded (have an inward_at record),
+            // regardless of their current status (DELIVERED, LOCAL_TRIP, INWARDED, etc.)
+            $query->whereNotNull('inward_at');
 
-            // Status Filter
+            // Optional Status Filter — filters by current status if user selects a specific one
+            // Handles case variants (e.g. 'DELIVERED' and 'Delivered')
             if ($request->filled('status') && $request->status !== 'All') {
-                $query->where('status', $request->status);
+                $filterStatus = $request->status;
+                $query->where(function ($q) use ($filterStatus) {
+                    $q->where('status', $filterStatus)
+                      ->orWhere('status', ucfirst(strtolower($filterStatus)))
+                      ->orWhere('status', strtoupper($filterStatus));
+                });
             }
 
             $results = $query->orderBy('inward_at', 'desc')->get();
@@ -1366,10 +1429,11 @@ class WaybillController extends Controller
 
             $waybill = Waybill::find($validated['id']);
 
-            if (strtoupper($waybill->status) !== 'DELIVERED') {
+            $normalizedAccountType = strtoupper(str_replace(' ', '', $waybill->account_type ?? ''));
+            if ($normalizedAccountType === 'TOPAY' && strtoupper($waybill->status) !== 'DELIVERED') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Payment can only be collected for DELIVERED waybills. Current status: ' . $waybill->status
+                    'message' => 'Payment can only be collected for DELIVERED waybills for TOPAY account type. Current status: ' . $waybill->status
                 ], 400);
             }
 
@@ -1482,6 +1546,11 @@ class WaybillController extends Controller
                 $waybill = Waybill::find($payData['id']);
                 $paid = (float) $payData['paid_amount'];
                 $disc = (float) ($payData['discount'] ?? 0);
+
+                $normalizedAccountType = strtoupper(str_replace(' ', '', $waybill->account_type ?? ''));
+                if ($normalizedAccountType === 'TOPAY' && strtoupper($waybill->status) !== 'DELIVERED') {
+                    throw new \Exception("Payment can only be collected for DELIVERED waybills for TOPAY account type. GC: {$waybill->gc_number} is " . $waybill->status);
+                }
 
                 $canPay = (float) $waybill->grand_total - (float) $waybill->amount_paid;
 
@@ -1775,7 +1844,16 @@ class WaybillController extends Controller
                     \Storage::disk('public')->delete($waybill->delivery_proof);
                 }
 
-                $path = $request->file('pod_file')->store('pods', 'public');
+                $file = $request->file('pod_file');
+                
+                if (in_array(strtolower($file->getClientOriginalExtension()), ['jpg', 'jpeg', 'png'])) {
+                    // Use ImageHelper for compression (GD-based, works on shared hosting)
+                    $filename = uniqid();
+                    $path = \App\Helpers\ImageHelper::compressAndStore($file, 'pods', $filename, 800, 70);
+                } else {
+                    // Normal upload for PDFs
+                    $path = $file->store('pods', 'public');
+                }
                 
                 $waybill->update([
                     'delivery_proof' => $path,

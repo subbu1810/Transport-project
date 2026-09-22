@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Search, Loader2, FileText, CheckCircle2, AlertCircle, Printer, Download, Eye, X, Clock } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function AckReportIdView() {
   const [filters, setFilters] = useState({ ackReportId: '' })
@@ -18,9 +19,13 @@ function AckReportIdView() {
     // Load transport name from localStorage
     const user = JSON.parse(localStorage.getItem('user')) || JSON.parse(localStorage.getItem('admin'))
     if (user) {
-      setTransportInfo({
+      const overrides = applyBranchOverrides(user, {
         name: user.transport_name || (user.transport && user.transport.name) || '',
         subtitle: user.transport_subtitle || (user.transport && user.transport.subtitle) || 'THE WINGS OF LOGISTICS',
+      });
+      setTransportInfo({
+        name: overrides.company_name || overrides.name,
+        subtitle: overrides.subtitle || 'THE WINGS OF LOGISTICS',
       })
     }
   }, [])

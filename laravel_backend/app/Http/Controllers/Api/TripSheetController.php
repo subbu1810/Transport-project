@@ -600,6 +600,14 @@ class TripSheetController extends Controller
                 // Update waybill status
                 $newStatus = ($tripSheet->trip_type === 'LOCAL') ? 'LOCAL_TRIP' : 'DISPATCHED';
                 Waybill::where('id', $waybillId)->update(['status' => $newStatus]);
+
+                \App\Models\WaybillTransit::create([
+                    'waybill_id' => $waybillId,
+                    'branch_id' => $validated['dispatch_branch_id'] ?? 1, // Fallback to 1 if not provided, though it should be
+                    'trip_sheet_id' => $tripSheet->id,
+                    'status' => 'DISPATCHED',
+                    'remarks' => "Dispatched via Trip Sheet {$finalTripNumber}",
+                ]);
             }
 
             // --- 3. Removed: Post Driver Advance to Cash Book (DEBIT) as per user request ---

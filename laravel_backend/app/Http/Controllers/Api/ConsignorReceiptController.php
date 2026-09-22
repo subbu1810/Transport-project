@@ -35,9 +35,19 @@ class ConsignorReceiptController extends Controller
             DB::beginTransaction();
 
             // Generate receipt number e.g. CR-2026-0001
+            // Use MAX-based approach to avoid duplicates when receipts are deleted
             $year = date('Y', strtotime($request->transaction_date));
-            $count = ConsignorReceipt::whereYear('transaction_date', $year)->count();
-            $receiptNo = 'CR-' . $year . '-' . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+            $lastReceipt = ConsignorReceipt::whereYear('transaction_date', $year)
+                ->where('receipt_no', 'like', 'CR-' . $year . '-%')
+                ->orderByRaw('CAST(SUBSTRING_INDEX(receipt_no, "-", -1) AS UNSIGNED) DESC')
+                ->first();
+
+            $nextNumber = 1;
+            if ($lastReceipt) {
+                $parts = explode('-', $lastReceipt->receipt_no);
+                $nextNumber = (int) end($parts) + 1;
+            }
+            $receiptNo = 'CR-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             // Calculate total amount
             $totalAmount = 0;

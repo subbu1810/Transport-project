@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Menu, LogOut, User, Phone, AlertTriangle } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api'
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 function Header({ onMenuClick, onLogout }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -12,28 +13,34 @@ function Header({ onMenuClick, onLogout }) {
 
   const loadCompanyInfo = (userData) => {
     if (!userData) return;
+    
+    const overrides = applyBranchOverrides(userData, {
+      transport_name: userData.transport_name,
+      transport_address: userData.transport_address,
+      transport_phone: userData.transport_phone
+    });
 
     // 1. Set values from user object if available
-    setCompanyName(userData.transport_name || '')
-    setCompanyAddress(userData.transport_address || '')
-    setCompanyPhone(userData.transport_phone || '')
+    setCompanyName(overrides.transport_name || '')
+    setCompanyAddress(overrides.transport_address || '')
+    setCompanyPhone(overrides.transport_phone || '')
 
     // 2. Fallbacks if user object is incomplete
-    if (!userData.transport_name) {
+    if (!overrides.transport_name) {
       fetch(`${API_BASE_URL}/settings/transport_name`)
         .then(r => r.json())
         .then(data => data.success && setCompanyName(data.data))
         .catch(() => { });
     }
 
-    if (!userData.transport_address) {
+    if (!overrides.transport_address) {
       fetch(`${API_BASE_URL}/settings/transport_address`)
         .then(r => r.json())
         .then(data => data.success && setCompanyAddress(data.data))
         .catch(() => { });
     }
 
-    if (!userData.transport_phone) {
+    if (!overrides.transport_phone) {
       fetch(`${API_BASE_URL}/settings/transport_phone`)
         .then(r => r.json())
         .then(data => data.success && setCompanyPhone(data.data))

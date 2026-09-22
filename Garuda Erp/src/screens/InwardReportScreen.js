@@ -8,6 +8,7 @@ import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export default function InwardReportScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -39,7 +40,7 @@ export default function InwardReportScreen({ navigation }) {
       if (userData) {
         const currentUser = JSON.parse(userData);
         setUser(currentUser);
-        setSelectedBranchId(currentUser.branch_id || 'ALL');
+        setSelectedBranchId(currentUser.role === 'superadmin' ? 'ALL' : (currentUser.branch_id ? currentUser.branch_id.toString() : 'ALL'));
       }
 
       const response = await api.get('/branches');
@@ -84,7 +85,7 @@ export default function InwardReportScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error fetching inward report:', error);
-      Alert.alert('Error', 'Connection failure. Check if backend is running.');
+      Alert.alert('Error', getErrorMessage(error, 'Connection failure. Check if backend is running.'));
     } finally {
       setLoading(false);
     }

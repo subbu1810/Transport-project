@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import axios from 'axios'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function IncomeExpenseReport() {
   const currentUser = JSON.parse(localStorage.getItem('user'))
@@ -18,6 +19,7 @@ function IncomeExpenseReport() {
   })
 
   const [reportData, setReportData] = useState([])
+  const [entries, setEntries] = useState([])
   const [totals, setTotals] = useState({ total_credit: 0, total_debit: 0, net_balance: 0 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -39,12 +41,18 @@ function IncomeExpenseReport() {
     try {
       // 1. Initial load from user context
       if (currentUser) {
-        setSettings(prev => ({
-          ...prev,
+        const overrides = applyBranchOverrides(currentUser, {
           company_name: currentUser.transport_name || 'Transport Logistics',
           address: currentUser.transport_address || '',
           phone: currentUser.transport_phone || '',
           logo_path: currentUser.transport_logo_url || ''
+        });
+        setSettings(prev => ({
+          ...prev,
+          company_name: overrides.company_name,
+          address: overrides.address,
+          phone: overrides.phone,
+          logo_path: overrides.logo_path || overrides.logo
         }))
       }
 
@@ -52,12 +60,19 @@ function IncomeExpenseReport() {
       const response = await axios.get(`${API_BASE_URL}/settings/all`);
       if (response.data.success) {
         const s = response.data.data;
+        const userData = JSON.parse(localStorage.getItem('user')) || {};
+        const overrides = applyBranchOverrides(userData, {
+          company_name: s.transport_name || s.company_name,
+          address: s.transport_address || s.address,
+          phone: s.transport_phone || s.phone,
+          logo_path: s.logo_path
+        });
         setSettings(prev => ({
           ...prev,
-          company_name: prev.company_name || s.transport_name || s.company_name,
-          address: prev.address || s.transport_address || s.address,
-          phone: prev.phone || s.transport_phone || s.phone,
-          logo_path: prev.logo_path || s.logo_path
+          company_name: prev.company_name || overrides.company_name,
+          address: prev.address || overrides.address,
+          phone: prev.phone || overrides.phone,
+          logo_path: prev.logo_path || overrides.logo_path || overrides.logo
         }));
       }
     } catch (err) { console.error('Error fetching settings:', err); }
@@ -94,6 +109,7 @@ function IncomeExpenseReport() {
       if (data.success) {
         setReportData(data.data.report)
         setTotals(data.data.totals)
+        setEntries(data.data.entries || [])
       } else {
         setError(data.message || 'Failed to fetch report')
       }
@@ -109,22 +125,27 @@ function IncomeExpenseReport() {
   }
 
   const exportToCSV = () => {
-    if (reportData.length === 0) return
-    const headers = ['Head Name', 'Type', 'Count', 'Total Amount']
+    if (entries.length === 0) return
+    const headers = ['Voucher No', 'Date', 'Account Head', 'Type', 'Branch', 'Paid To / Received From', 'Mode', 'Amount', 'Remarks']
     const csvContent = [
       headers.join(','),
-      ...reportData.map(item => [
-        item.account_head_name,
-        item.transaction_type,
-        item.count,
-        item.total_amount
+      ...entries.map(item => [
+        `"${item.voucher_no || ''}"`,
+        `"${item.transaction_date || ''}"`,
+        `"${item.account_head?.name || 'Unknown'}"`,
+        `"${item.transaction_type}"`,
+        `"${item.branch?.branch_name || 'N/A'}"`,
+        `"${item.paid_to_receive_from || ''}"`,
+        `"${item.mode_of_pay || ''}"`,
+        item.amount,
+        `"${(item.remarks || '').replace(/"/g, '""')}"`
       ].join(','))
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.setAttribute('href', URL.createObjectURL(blob))
-    link.setAttribute('download', `Income_Expense_Report_${filters.fromDate}_to_${filters.toDate}.csv`)
+    link.setAttribute('download', `Detailed_Income_Expense_Report_${filters.fromDate}_to_${filters.toDate}.csv`)
     link.click()
   }
 
@@ -135,30 +156,20 @@ function IncomeExpenseReport() {
   return (
     <div className="p-3 space-y-3 bg-gray-50/50 min-h-screen printable-area">
       {/* PRINT-ONLY HEADER */}
-      <div className="hidden print:block mb-6 border-b-2 border-gray-800 pb-4">
-        <div className="flex justify-between items-start">
-          <div className="flex gap-4">
-            {settings.logo_path && (
-               <img 
-                 src={settings.logo_path.startsWith('http') ? settings.logo_path : `${STORAGE_URL}/${settings.logo_path}`} 
-                 alt="Logo" 
-                 className="h-14 w-auto object-contain"
-               />
-            )}
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-gray-900 leading-none">
-                {settings.company_name}
-              </h1>
-              <p className="text-[10px] font-bold text-gray-500 uppercase mt-1 max-w-[400px]">
-                {settings.address}  {settings.phone && `| Contact: ${settings.phone}`}
-              </p>
-            </div>
+      <div className="hidden print:block mb-4 border-2 border-black p-3 text-center">
+        <h1 className="text-2xl font-black uppercase text-black leading-none mb-1">
+          {settings.company_name}
+        </h1>
+        <p className="text-[10px] font-bold text-black uppercase">
+          {settings.address} {settings.phone && ` | MOB: ${settings.phone}`}
+        </p>
+        {settings.gstin && (
+          <div className="text-[10px] font-bold text-black border-t border-black mt-2 pt-1 text-left">
+            GSTIN : {settings.gstin}
           </div>
-          <div className="text-right">
-            <div className="inline-block bg-gray-900 text-white px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest mb-2">Audit Report</div>
-            <h2 className="text-lg font-black text-gray-800 uppercase leading-none">Income & Expense</h2>
-            <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">Period: {formatDate(filters.fromDate)} — {formatDate(filters.toDate)}</p>
-          </div>
+        )}
+        <div className="text-xs font-bold text-black border-t-2 border-black mt-2 pt-2 uppercase tracking-wide underline">
+          INCOME & EXPENSE STATEMENT ({formatDate(filters.fromDate)} TO {formatDate(filters.toDate)})
         </div>
       </div>
 
@@ -256,7 +267,7 @@ function IncomeExpenseReport() {
       </div>
 
       {/* Aggregate Metric Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 no-print">
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-colors border-b-4 border-b-emerald-500">
           <div>
             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1 text-emerald-600">Total Income</p>
@@ -298,13 +309,12 @@ function IncomeExpenseReport() {
           </div>
         </div>
       </div>
-
       {/* Transaction Ledger Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 flex justify-between items-center border-b border-gray-100">
+        <div className="px-4 py-3 bg-gray-50 flex justify-between items-center border-b border-gray-100 no-print">
           <div className="flex items-center gap-2">
             <PieChart size={16} className="text-gray-400" />
-            <h3 className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Aggregate Data Ledger ({reportData.length} Account Heads)</h3>
+            <h3 className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Detailed Cash Ledger ({entries.length} Entries)</h3>
           </div>
           <div className="flex items-center gap-2 no-print">
             <button
@@ -315,7 +325,7 @@ function IncomeExpenseReport() {
             </button>
             <button
               onClick={exportToCSV}
-              disabled={reportData.length === 0}
+              disabled={entries.length === 0}
               className="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-black text-[9px] uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
             >
               <Download size={12} /> Data Export
@@ -325,27 +335,43 @@ function IncomeExpenseReport() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
+            <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '8%' }} />
+            </colgroup>
             <thead className="bg-gray-100/80 border-b border-gray-200">
               <tr className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                <th className="px-6 py-4">Account Head Narrative</th>
-                <th className="px-4 py-4 text-center">Transactions</th>
-                <th className="px-4 py-4 text-center">Financial Type</th>
-                <th className="px-6 py-4 text-right">Sum Total (₹)</th>
+                <th className="px-4 py-4">Date</th>
+                <th className="px-4 py-4">Voucher No</th>
+                <th className="px-4 py-4">Account Head</th>
+                <th className="px-4 py-4">Branch</th>
+                <th className="px-4 py-4">Paid To / Recd From</th>
+                <th className="px-4 py-4">Remarks</th>
+                <th className="px-4 py-4 text-center">Mode</th>
+                <th className="px-4 py-4 text-center">Type</th>
+                <th className="px-6 py-4 text-right">Amount (₹)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-32 text-center">
+                  <td colSpan="9" className="px-4 py-32 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <Loader2 size={42} className="animate-spin text-blue-600 opacity-20" />
                       <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Crunching Period Balances...</span>
                     </div>
                   </td>
                 </tr>
-              ) : reportData.length === 0 ? (
+              ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-24 text-center">
+                  <td colSpan="9" className="px-4 py-24 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="p-4 bg-gray-50 rounded-full">
                         <Activity size={48} className="text-gray-200" />
@@ -355,26 +381,38 @@ function IncomeExpenseReport() {
                   </td>
                 </tr>
               ) : (
-                reportData.map((item, idx) => (
+                entries.map((item, idx) => (
                   <tr key={idx} className="hover:bg-blue-50/20 transition-all group">
-                    <td className="px-6 py-4">
-                       <div className="flex flex-col">
-                        <span className="text-xs font-black text-gray-900 group-hover:text-blue-700 transition-colors uppercase">{item.account_head_name}</span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Consolidated Ledger Entries</span>
-                       </div>
+                    <td className="px-4 py-3 text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      {formatDate(item.transaction_date)}
                     </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-black text-gray-600 border border-gray-200">{item.count} Entries</span>
+                    <td className="px-4 py-3 text-xs font-black text-gray-900 font-mono">
+                      {item.voucher_no}
                     </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className={`px-2.5 py-1 rounded text-[9px] font-black tracking-widest ${item.transaction_type === 'CREDIT' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-rose-100 text-rose-700 border border-rose-200'
+                    <td className="px-4 py-3">
+                       <span className="text-xs font-bold text-gray-900 uppercase">{item.account_head?.name || 'Unknown'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {item.branch?.branch_name || 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-800 font-semibold">
+                      {item.paid_to_receive_from || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate" title={item.remarks}>
+                      {item.remarks || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-600">
+                      <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-bold border border-gray-200">{item.mode_of_pay}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-widest ${item.transaction_type === 'CREDIT' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-rose-100 text-rose-700 border border-rose-200'
                         }`}>
                         {item.transaction_type === 'CREDIT' ? 'INCOME' : 'EXPENSE'}
                       </span>
                     </td>
-                    <td className={`px-6 py-4 text-right text-sm font-black italic tabular-nums ${item.transaction_type === 'CREDIT' ? 'text-emerald-700' : 'text-rose-700'
+                    <td className={`px-6 py-3 text-right text-xs font-black tabular-nums ${item.transaction_type === 'CREDIT' ? 'text-emerald-700' : 'text-rose-700'
                       }`}>
-                      ₹{parseFloat(item.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      ₹{parseFloat(item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))
@@ -384,14 +422,14 @@ function IncomeExpenseReport() {
         </div>
 
         {/* PERIOD AUDIT SUMMARY BLOCK - Outside table to prevent repetition on every printed page */}
-        {reportData.length > 0 && !loading && (
-          <div className="bg-gray-900 text-white p-4 flex flex-col md:flex-row justify-between items-center gap-4 print:bg-black print:border-t-2 print:border-gray-800">
+        {entries.length > 0 && !loading && (
+          <div className="bg-gray-900 text-white p-4 flex flex-col md:flex-row justify-between items-center gap-4 no-print">
             <div className="flex items-center gap-3">
               <div className="w-2 h-8 bg-blue-600 rounded-full print:bg-white" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] italic opacity-80">Period Audit Result</p>
                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mt-1">
-                  {reportData.reduce((acc, curr) => acc + curr.count, 0)} Posts Analyzed
+                  {entries.length} Posts Analyzed
                 </p>
               </div>
             </div>
@@ -421,6 +459,78 @@ function IncomeExpenseReport() {
       <div className="mt-4 text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest no-print">
         Designed for Industrial Logistics Audit & Compliance
       </div>
+
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 0.5in; }
+          body { background: white !important; color: black !important; margin: 0 !important; padding: 0.5in !important; }
+          .no-print { display: none !important; }
+          .printable-area { padding: 0 !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+          .printable-area > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+          
+          /* Remove borders, shadows, background styles */
+          .bg-white { border: none !important; box-shadow: none !important; background: transparent !important; margin-top: 0 !important; }
+          .shadow-sm { box-shadow: none !important; }
+          
+          /* Simple Black & White Table with clean borders */
+          table { 
+            width: 100% !important; 
+            border-collapse: separate !important; 
+            border-spacing: 0 !important; 
+            font-size: 8.5pt !important; 
+            table-layout: fixed !important; 
+            border-left: 1px solid black !important;
+            border-right: 1px solid black !important;
+            border-bottom: 1px solid black !important;
+          }
+          th { 
+            border-top: 1px solid black !important; 
+            border-bottom: 1px solid black !important; 
+            border-right: 1px solid black !important; 
+            background: #f3f4f6 !important; 
+            color: black !important; 
+            -webkit-print-color-adjust: exact; 
+            padding: 6px 8px !important; 
+            font-weight: bold !important; 
+            text-transform: uppercase !important; 
+          }
+          th:last-child {
+            border-right: none !important;
+          }
+          td { 
+            border-bottom: 1px solid black !important; 
+            border-right: 1px solid black !important; 
+            padding: 6px 8px !important; 
+            color: black !important; 
+          }
+          td:last-child {
+            border-right: none !important;
+          }
+          tr { page-break-inside: avoid !important; }
+          
+          /* Prevent wrapping for compact columns */
+          td:nth-child(1), td:nth-child(2), td:nth-child(7), td:nth-child(8), td:nth-child(9),
+          th:nth-child(1), th:nth-child(2), th:nth-child(7), th:nth-child(8), th:nth-child(9) {
+            white-space: nowrap !important;
+          }
+          
+          /* Handle text wrapping for remarks and names */
+          td:nth-child(3), td:nth-child(4), td:nth-child(5), td:nth-child(6) {
+            word-break: break-word !important;
+            white-space: normal !important;
+          }
+          
+          /* Clean up badges (make them simple text without background pill colors) */
+          .bg-emerald-100, .bg-rose-100, .bg-gray-100 { 
+            background: transparent !important; 
+            border: none !important; 
+            padding: 0 !important; 
+            color: black !important; 
+            font-weight: bold !important;
+          }
+          .text-emerald-700, .text-rose-700 { color: black !important; }
+        }
+      `}</style>
     </div>
   )
 }

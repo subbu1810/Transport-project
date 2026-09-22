@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Info, X, Printer, Download, Calendar, Filter, ChevronDown, ChevronRight, Search, FileText, AlertCircle } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function CashBookReport() {
     const [reportData, setReportData] = useState([])
@@ -24,6 +25,11 @@ function CashBookReport() {
     })
     const [showHelp, setShowHelp] = useState(false)
 
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(20)
+    const [pageInput, setPageInput] = useState('1')
+
     useEffect(() => {
         const userData = localStorage.getItem('user')
         if (userData) {
@@ -40,15 +46,23 @@ function CashBookReport() {
     const fetchTransportDetails = async (userData) => {
         try {
             if (userData?.transport_name) {
-                setTransportDetails({
+                const details = applyBranchOverrides(userData, {
                     name: userData.transport_name,
                     address: userData.transport_address || '',
                     phone: userData.transport_phone || '',
                     email: userData.email || '',
-                    logo: userData.transport_logo_url
-                        ? (userData.transport_logo_url.startsWith('http')
-                            ? userData.transport_logo_url
-                            : `${STORAGE_URL}/${userData.transport_logo_url}`)
+                    logo: userData.transport_logo_url || null
+                });
+
+                setTransportDetails({
+                    name: details.company_name || details.name,
+                    address: details.address,
+                    phone: details.phone,
+                    email: details.email,
+                    logo: details.logo_path || details.logo
+                        ? ((details.logo_path || details.logo).startsWith('http')
+                            ? (details.logo_path || details.logo)
+                            : `${STORAGE_URL}/${(details.logo_path || details.logo)}`)
                         : null
                 })
             }
@@ -58,9 +72,16 @@ function CashBookReport() {
     }
 
     useEffect(() => {
-        if (currentUser) {
-            generateReport()
+        if (!currentUser || !filters.from_date || !filters.to_date || filters.from_date > filters.to_date) {
+            return
         }
+
+        // Cancelling the previous request prevents an older date range from
+        // overwriting the report after the user changes a filter.
+        const controller = new AbortController()
+        generateReport(controller.signal)
+
+        return () => controller.abort()
     }, [currentUser, filters.from_date, filters.to_date, filters.branch_id, branches])
 
     const fetchBranches = async () => {
@@ -84,33 +105,36 @@ function CashBookReport() {
         }
     }
 
-    const generateReport = async () => {
+    const generateReport = async (signal) => {
         try {
             // 1. Fetch closing summaries (to mark days as closed)
-            let closingUrl = `${API_BASE_URL}/day-book-closings?from_date=${filters.from_date}&to_date=${filters.to_date}`
+            const dateParams = new URLSearchParams({
+                from_date: filters.from_date,
+                to_date: filters.to_date
+            })
             if (filters.branch_id !== 'All Branches') {
-                closingUrl += `&branch_id=${filters.branch_id}`
+                dateParams.set('branch_id', filters.branch_id)
             }
-            const closingRes = await fetch(closingUrl)
+            const closingRes = await fetch(`${API_BASE_URL}/day-book-closings?${dateParams}`, { signal })
             const closingData = await closingRes.json()
-            const closings = closingData.success ? closingData.data : []
+            const isInSelectedRange = (date) => {
+                const normalizedDate = date?.split(' ')[0]
+                return normalizedDate >= filters.from_date && normalizedDate <= filters.to_date
+            }
+            const closings = closingData.success ? closingData.data.filter(c => isInSelectedRange(c.closing_date)) : []
             setReportData(closings)
 
             // 2. Fetch ALL transaction entries for the range
-            let entriesUrl = `${API_BASE_URL}/cash-book?from_date=${filters.from_date}&to_date=${filters.to_date}`
-            if (filters.branch_id !== 'All Branches' && filters.branch_id) {
-                entriesUrl += `&branch_id=${filters.branch_id}`
-            }
-            const entriesRes = await fetch(entriesUrl)
+            const entriesRes = await fetch(`${API_BASE_URL}/cash-book?${dateParams}`, { signal })
             const entriesData = await entriesRes.json()
-            const entries = entriesData.success ? entriesData.data : []
+            const entries = entriesData.success ? entriesData.data.filter(e => isInSelectedRange(e.transaction_date)) : []
             setDetailedEntries(entries)
 
             // 3. SECURE OPENING BALANCE: Fetch opening for each branch as of START DATE
             const targetBranches = filters.branch_id === 'All Branches' ? branches : branches.filter(b => b.id.toString() === filters.branch_id.toString())
             
             const openingPromises = targetBranches.map(async (b) => {
-                const res = await fetch(`${API_BASE_URL}/day-book-closings/opening-balance?branch_id=${b.id}&date=${filters.from_date}`)
+                const res = await fetch(`${API_BASE_URL}/day-book-closings/opening-balance?branch_id=${b.id}&date=${filters.from_date}`, { signal })
                 const d = await res.json()
                 return { branch_id: b.id, opening_balance: Number(d.data?.opening_balance) || 0 }
             })
@@ -121,6 +145,7 @@ function CashBookReport() {
             setStartBalances(openingsMap)
 
         } catch (err) {
+            if (err.name === 'AbortError') return
             console.error('Error generating detailed report:', err)
         }
     }
@@ -495,6 +520,116 @@ function CashBookReport() {
         printWindow.document.close()
     }
 
+    const rawReportRows = React.useMemo(() => {
+        const closingMap = {}
+        reportData.forEach(c => {
+            closingMap[`${c.branch_id}-${c.closing_date}`] = c
+        })
+
+        const entryDaysMap = {}
+        
+        const filteredEntries = detailedEntries.filter(e => {
+            if (!searchTerm) return true
+            const s = searchTerm.toLowerCase()
+            const headName = (e.account_head?.name || e.accountHead?.name || '').toLowerCase()
+            const remarks = (e.remarks || '').toLowerCase()
+            return headName.includes(s) || remarks.includes(s) || String(e.amount).includes(s)
+        })
+
+        filteredEntries.forEach(e => {
+            const dateKey = e.transaction_date?.split(' ')[0]
+            if (!dateKey) return
+            const key = `${e.branch_id}-${dateKey}`
+            if (!entryDaysMap[key]) {
+                entryDaysMap[key] = {
+                    branch_id: e.branch_id,
+                    branch_name: e.branch?.branch_name,
+                    date: dateKey,
+                    credits: 0,
+                    debits: 0
+                }
+            }
+            if (e.transaction_type === 'CREDIT') entryDaysMap[key].credits += Number(e.amount)
+            else entryDaysMap[key].debits += Number(e.amount)
+        })
+
+        const allKeys = new Set(
+            searchTerm 
+                ? Object.keys(entryDaysMap) 
+                : [...Object.keys(closingMap), ...Object.keys(entryDaysMap)]
+        )
+        const rawRows = Array.from(allKeys).map(key => {
+            const c = closingMap[key]
+            const e = entryDaysMap[key]
+            const bId = key.substring(0, key.indexOf('-'))
+            const d = key.substring(key.indexOf('-') + 1)
+            return {
+                key,
+                is_closed: !!c,
+                id: c?.id || `draft-${key}`,
+                closing_date: d,
+                branch_id: bId,
+                branch_name: c?.branch?.branch_name || e?.branch_name || 'N/A',
+                credits: c ? Number(c.credit_total) : (e?.credits || 0),
+                debits: c ? Number(c.debit_total) : (e?.debits || 0),
+                closed_opening: c ? Number(c.opening_balance) : null,
+                closed_closing: c ? Number(c.closing_balance) : null
+            }
+        }).sort((a, b) => a.closing_date.localeCompare(b.closing_date))
+
+        const rollingBalances = { ...startBalances }
+        return rawRows.map(row => {
+            const bId = row.branch_id
+            const calcOpening = rollingBalances[bId] !== undefined ? rollingBalances[bId] : (row.closed_opening || 0)
+            const calcClosing = calcOpening + row.credits - row.debits
+            
+            rollingBalances[bId] = calcClosing
+
+            return {
+                ...row,
+                opening_balance: calcOpening,
+                closing_balance: calcClosing,
+                warning: row.is_closed && Math.abs(calcClosing - (row.closed_closing || 0)) > 1
+            }
+        }).sort((a, b) => a.closing_date.localeCompare(b.closing_date) || a.branch_name.localeCompare(b.branch_name))
+    }, [reportData, detailedEntries, searchTerm, startBalances])
+
+    // Pagination Logic
+    const totalItems = rawReportRows.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages || 1);
+            setPageInput((totalPages || 1).toString());
+        }
+    }, [totalPages, currentPage]);
+
+    const handlePageInputChange = (e) => {
+        setPageInput(e.target.value);
+    };
+
+    const handlePageInputKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            const page = parseInt(pageInput, 10);
+            if (!isNaN(page) && page >= 1 && page <= totalPages) {
+                setCurrentPage(page);
+            } else {
+                setPageInput(currentPage.toString());
+            }
+        }
+    };
+
+    const goToPage = (page) => {
+        setCurrentPage(page);
+        setPageInput(page.toString());
+    };
+
+    const paginatedRows = rawReportRows.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
     return (
         <div className="p-2 space-y-4 bg-gray-50 min-h-screen">
             <div className="flex justify-between items-center">
@@ -623,202 +758,119 @@ function CashBookReport() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {(() => {
-                                // 1. Map all closings by Date-Branch key
-                                const closingMap = {}
-                                reportData.forEach(c => {
-                                    closingMap[`${c.branch_id}-${c.closing_date}`] = c
-                                })
+                            {paginatedRows.length > 0 ? paginatedRows.map((row) => (
+                                <React.Fragment key={row.key}>
+                                    <tr
+                                        onClick={() => toggleRow(row.key, row.branch_id, row.closing_date)}
+                                        className={`hover:bg-blue-50/50 transition duration-300 font-bold cursor-pointer ${!row.is_closed ? 'bg-amber-50/20' : ''}`}
+                                    >
+                                        <td className="px-4 py-2 text-center border-r border-gray-50">
+                                            {expandedRows.has(row.key) ? (
+                                                <ChevronDown size={18} className="text-[#1e3a8a]" />
+                                            ) : (
+                                                <ChevronRight size={18} className="text-gray-400" />
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-2 text-gray-600 border-r border-gray-50">
+                                            <div className="flex items-center gap-2">
+                                                {row.closing_date}
+                                                {!row.is_closed && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded-sm uppercase tracking-tighter">Draft</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-2 text-[#1e3a8a] border-r border-gray-50">{row.branch_name}</td>
+                                        <td className="px-4 py-2 text-right text-gray-400 border-r border-gray-50 italic">₹{Number(row.opening_balance).toLocaleString('en-IN')}</td>
+                                        <td className="px-4 py-2 text-right text-emerald-600 border-r border-gray-50 font-black">₹{Number(row.credits).toLocaleString('en-IN')}</td>
+                                        <td className="px-4 py-2 text-right text-rose-600 border-r border-gray-50 font-black">₹{Number(row.debits).toLocaleString('en-IN')}</td>
+                                        <td className={`px-4 py-2 text-right font-black border-r border-gray-50 ${row.warning ? 'text-amber-600 bg-amber-50' : 'text-gray-900 bg-gray-50/50'}`}>
+                                            ₹{Number(row.closing_balance).toLocaleString('en-IN')}
+                                            {row.warning && <AlertCircle size={10} className="inline ml-1" title="Discrepancy: Entries sum different from Closed total" />}
+                                        </td>
+                                        <td className="px-4 py-2 text-center no-print">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); printDayReport(row); }}
+                                                className={`p-1.5 rounded transition ${row.is_closed ? 'text-blue-600 hover:bg-blue-50' : 'text-amber-600 hover:bg-amber-50'}`}
+                                                title={row.is_closed ? "Print Finalized Day Report" : "Print Draft Day Report"}
+                                            >
+                                                <Printer size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {expandedRows.has(row.key) && (
+                                    <tr className="bg-white">
+                                        <td colSpan="8" className="px-0 py-0 border-b border-gray-100">
+                                            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <table className="w-full text-[11px] border-collapse bg-white">
+                                                    <thead className="bg-gray-50 text-gray-800 border-y border-gray-200">
+                                                        <tr>
+                                                            <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Date</th>
+                                                            <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Branch</th>
+                                                            <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Account Head</th>
+                                                            <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Remarks</th>
+                                                            <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Credit (₹)</th>
+                                                            <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Debit (₹)</th>
+                                                            <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Balance (₹)</th>
+                                                            <th className="px-3 py-2 text-center font-bold uppercase tracking-tight no-print">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-50 font-medium">
+                                                        {(() => {
+                                                            let runningBal = Number(row.opening_balance)
+                                                            const dayEntries = getBranchDateEntries(row.branch_id, row.closing_date)
 
-                                // 2. Get all distinct Date-Branch combinations from entries
-                                const entryDaysMap = {}
-                                
-                                const filteredEntries = detailedEntries.filter(e => {
-                                    if (!searchTerm) return true
-                                    const s = searchTerm.toLowerCase()
-                                    const headName = (e.account_head?.name || e.accountHead?.name || '').toLowerCase()
-                                    const remarks = (e.remarks || '').toLowerCase()
-                                    return headName.includes(s) || remarks.includes(s) || String(e.amount).includes(s)
-                                })
+                                                            if (dayEntries.length === 0) {
+                                                                return (
+                                                                    <tr>
+                                                                        <td colSpan="8" className="px-3 py-8 text-center text-gray-400 italic font-normal">No detailed transactions recorded for this day.</td>
+                                                                    </tr>
+                                                                )
+                                                            }
 
-                                filteredEntries.forEach(e => {
-                                    const dateKey = e.transaction_date?.split(' ')[0]
-                                    if (!dateKey) return
-                                    const key = `${e.branch_id}-${dateKey}`
-                                    if (!entryDaysMap[key]) {
-                                        entryDaysMap[key] = {
-                                            branch_id: e.branch_id,
-                                            branch_name: e.branch?.branch_name,
-                                            date: dateKey,
-                                            credits: 0,
-                                            debits: 0
-                                        }
-                                    }
-                                    if (e.transaction_type === 'CREDIT') entryDaysMap[key].credits += Number(e.amount)
-                                    else entryDaysMap[key].debits += Number(e.amount)
-                                })
+                                                            return dayEntries.map((e) => {
+                                                                if (e.transaction_type === 'CREDIT') runningBal += Number(e.amount)
+                                                                else runningBal -= Number(e.amount)
 
-                                // 3. Merge both lists and sort by date then branch
-                                const allKeys = new Set(
-                                    searchTerm 
-                                        ? Object.keys(entryDaysMap) 
-                                        : [...Object.keys(closingMap), ...Object.keys(entryDaysMap)]
-                                )
-                                const rawRows = Array.from(allKeys).map(key => {
-                                    const c = closingMap[key]
-                                    const e = entryDaysMap[key]
-                                    const bId = key.substring(0, key.indexOf('-'))
-                                    const d = key.substring(key.indexOf('-') + 1)
-                                    return {
-                                        key,
-                                        is_closed: !!c,
-                                        id: c?.id || `draft-${key}`,
-                                        closing_date: d,
-                                        branch_id: bId,
-                                        branch_name: c?.branch?.branch_name || e?.branch_name || 'N/A',
-                                        credits: c ? Number(c.credit_total) : (e?.credits || 0),
-                                        debits: c ? Number(c.debit_total) : (e?.debits || 0),
-                                        closed_opening: c ? Number(c.opening_balance) : null,
-                                        closed_closing: c ? Number(c.closing_balance) : null
-                                    }
-                                }).sort((a, b) => a.closing_date.localeCompare(b.closing_date))
+                                                                const headName = e.account_head?.name || e.accountHead?.name || 'N/A'
 
-                                // 4. DYNAMIC BALANCE ROLL-FORWARD
-                                const rollingBalances = { ...startBalances }
-                                const rows = rawRows.map(row => {
-                                    const bId = row.branch_id
-                                    // Start with rolling balance if available, otherwise 0 or the closed opening
-                                    const calcOpening = rollingBalances[bId] !== undefined ? rollingBalances[bId] : (row.closed_opening || 0)
-                                    const calcClosing = calcOpening + row.credits - row.debits
-                                    
-                                    // Update rolling for next appearance of this branch
-                                    rollingBalances[bId] = calcClosing
-
-                                    return {
-                                        ...row,
-                                        opening_balance: calcOpening,
-                                        closing_balance: calcClosing,
-                                        // Discrepancy check: If closed but math doesn't match entries
-                                        warning: row.is_closed && Math.abs(calcClosing - (row.closed_closing || 0)) > 1
-                                    }
-                                }).sort((a, b) => a.closing_date.localeCompare(b.closing_date) || a.branch_name.localeCompare(b.branch_name))
-
-                                if (rows.length === 0) return null
-
-                                return rows.map((row) => (
-                                    <React.Fragment key={row.key}>
-                                        <tr
-                                            onClick={() => toggleRow(row.key, row.branch_id, row.closing_date)}
-                                            className={`hover:bg-blue-50/50 transition duration-300 font-bold cursor-pointer ${!row.is_closed ? 'bg-amber-50/20' : ''}`}
-                                        >
-                                            <td className="px-4 py-2 text-center border-r border-gray-50">
-                                                {expandedRows.has(row.key) ? (
-                                                    <ChevronDown size={18} className="text-[#1e3a8a]" />
-                                                ) : (
-                                                    <ChevronRight size={18} className="text-gray-400" />
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-2 text-gray-600 border-r border-gray-50">
-                                                <div className="flex items-center gap-2">
-                                                    {row.closing_date}
-                                                    {!row.is_closed && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded-sm uppercase tracking-tighter">Draft</span>}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 text-[#1e3a8a] border-r border-gray-50">{row.branch_name}</td>
-                                            <td className="px-4 py-2 text-right text-gray-400 border-r border-gray-50 italic">₹{Number(row.opening_balance).toLocaleString('en-IN')}</td>
-                                            <td className="px-4 py-2 text-right text-emerald-600 border-r border-gray-50 font-black">₹{Number(row.credits).toLocaleString('en-IN')}</td>
-                                            <td className="px-4 py-2 text-right text-rose-600 border-r border-gray-50 font-black">₹{Number(row.debits).toLocaleString('en-IN')}</td>
-                                            <td className={`px-4 py-2 text-right font-black border-r border-gray-50 ${row.warning ? 'text-amber-600 bg-amber-50' : 'text-gray-900 bg-gray-50/50'}`}>
-                                                ₹{Number(row.closing_balance).toLocaleString('en-IN')}
-                                                {row.warning && <AlertCircle size={10} className="inline ml-1" title="Discrepancy: Entries sum different from Closed total" />}
-                                            </td>
-                                            <td className="px-4 py-2 text-center no-print">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); printDayReport(row); }}
-                                                    className={`p-1.5 rounded transition ${row.is_closed ? 'text-blue-600 hover:bg-blue-50' : 'text-amber-600 hover:bg-amber-50'}`}
-                                                    title={row.is_closed ? "Print Finalized Day Report" : "Print Draft Day Report"}
-                                                >
-                                                    <Printer size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        {expandedRows.has(row.key) && (
-                                        <tr className="bg-white">
-                                            <td colSpan="8" className="px-0 py-0 border-b border-gray-100">
-                                                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                                                    <table className="w-full text-[11px] border-collapse bg-white">
-                                                        <thead className="bg-gray-50 text-gray-800 border-y border-gray-200">
-                                                            <tr>
-                                                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Date</th>
-                                                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Branch</th>
-                                                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Account Head</th>
-                                                                <th className="px-3 py-2 text-left font-bold uppercase tracking-tight">Remarks</th>
-                                                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Credit (₹)</th>
-                                                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Debit (₹)</th>
-                                                                <th className="px-3 py-2 text-right font-bold uppercase tracking-tight">Balance (₹)</th>
-                                                                <th className="px-3 py-2 text-center font-bold uppercase tracking-tight no-print">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-gray-50 font-medium">
-                                                            {(() => {
-                                                                let runningBal = Number(row.opening_balance)
-                                                                const dayEntries = getBranchDateEntries(row.branch_id, row.closing_date)
-
-                                                                if (dayEntries.length === 0) {
-                                                                    return (
-                                                                        <tr>
-                                                                            <td colSpan="8" className="px-3 py-8 text-center text-gray-400 italic font-normal">No detailed transactions recorded for this day.</td>
-                                                                        </tr>
-                                                                    )
-                                                                }
-
-                                                                return dayEntries.map((e) => {
-                                                                    if (e.transaction_type === 'CREDIT') runningBal += Number(e.amount)
-                                                                    else runningBal -= Number(e.amount)
-
-                                                                    const headName = e.account_head?.name || e.accountHead?.name || 'N/A'
-
-                                                                    return (
-                                                                        <tr key={`entry-${e.id}`} className="hover:bg-gray-50/50 transition border-b border-gray-50 shadow-sm">
-                                                                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{e.transaction_date}</td>
-                                                                            <td className="px-3 py-2.5 text-gray-500 uppercase text-[9px]">{e.branch?.branch_name || '-'}</td>
-                                                                            <td className="px-3 py-2.5 font-black text-[#1e3a8a] text-[10px]">
-                                                                                {headName}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 text-gray-600 max-w-[250px] truncate leading-tight font-medium">
-                                                                                {e.remarks || '-'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 text-right font-black text-emerald-700 bg-emerald-50/10">
-                                                                                {e.transaction_type === 'CREDIT' ? `₹${Number(e.amount).toLocaleString('en-IN')}` : '-'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 text-right font-black text-rose-700 bg-rose-50/10">
-                                                                                {e.transaction_type === 'DEBIT' ? `₹${Number(e.amount).toLocaleString('en-IN')}` : '-'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 bg-gray-50/40">
-                                                                                ₹{runningBal.toLocaleString('en-IN')}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 text-center no-print border-l border-gray-50">
-                                                                                <button
-                                                                                    onClick={(event) => { event.stopPropagation(); printVoucher(e); }}
-                                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                                                    title="Print Voucher"
-                                                                                >
-                                                                                    <Printer size={15} />
-                                                                                </button>
-                                                                            </td>
-                                                                        </tr>
-                                                                    )
-                                                                })
-                                                            })()}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                                                return (
+                                                                    <tr key={`entry-${e.id}`} className="hover:bg-gray-50/50 transition border-b border-gray-50 shadow-sm">
+                                                                        <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{e.transaction_date}</td>
+                                                                        <td className="px-3 py-2.5 text-gray-500 uppercase text-[9px]">{e.branch?.branch_name || '-'}</td>
+                                                                        <td className="px-3 py-2.5 font-black text-[#1e3a8a] text-[10px]">
+                                                                            {headName}
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 text-gray-600 max-w-[250px] truncate leading-tight font-medium">
+                                                                            {e.remarks || '-'}
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 text-right font-black text-emerald-700 bg-emerald-50/10">
+                                                                            {e.transaction_type === 'CREDIT' ? `₹${Number(e.amount).toLocaleString('en-IN')}` : '-'}
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 text-right font-black text-rose-700 bg-rose-50/10">
+                                                                            {e.transaction_type === 'DEBIT' ? `₹${Number(e.amount).toLocaleString('en-IN')}` : '-'}
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 text-right font-black text-gray-900 bg-gray-50/40">
+                                                                            ₹{runningBal.toLocaleString('en-IN')}
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 text-center no-print border-l border-gray-50">
+                                                                            <button
+                                                                                onClick={(event) => { event.stopPropagation(); printVoucher(e); }}
+                                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                                                title="Print Voucher"
+                                                                            >
+                                                                                <Printer size={15} />
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                )
+                                                            })
+                                                        })()}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </td>
+                                    </tr>
                                     )}
-                                    </React.Fragment>
-                                ))
-                            })() || (
+                                </React.Fragment>
+                            )) : (
                                 <tr>
                                     <td colSpan="8" className="px-6 py-20 text-center text-gray-400 italic font-medium">
                                         No transaction data found for the selected period.
@@ -842,6 +894,77 @@ function CashBookReport() {
                         )}
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalItems > 0 && (
+                    <div className="flex flex-wrap items-center justify-between mt-4 px-2 py-2 bg-gray-50 border-t border-gray-200 print:hidden text-xs text-gray-700">
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={itemsPerPage}
+                                onChange={(e) => {
+                                    setItemsPerPage(Number(e.target.value));
+                                    goToPage(1);
+                                }}
+                                className="px-2 py-1 border border-gray-300 rounded bg-white outline-none focus:border-blue-500"
+                            >
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={30}>30</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                            <div className="flex items-center gap-1 border-l pl-2 border-gray-300">
+                                <button
+                                    onClick={() => goToPage(1)}
+                                    disabled={currentPage === 1}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="First Page"
+                                >
+                                    <span className="font-bold">|&lt;</span>
+                                </button>
+                                <button
+                                    onClick={() => goToPage(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Previous Page"
+                                >
+                                    <span className="font-bold">&lt;</span>
+                                </button>
+                                <div className="flex items-center gap-1 px-2">
+                                    <span>Page</span>
+                                    <input
+                                        type="text"
+                                        value={pageInput}
+                                        onChange={handlePageInputChange}
+                                        onKeyDown={handlePageInputKeyDown}
+                                        onBlur={() => setPageInput(currentPage.toString())}
+                                        className="w-12 px-1 py-0.5 text-center border border-gray-300 rounded outline-none focus:border-blue-500"
+                                    />
+                                    <span>of {totalPages}</span>
+                                </div>
+                                <button
+                                    onClick={() => goToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Next Page"
+                                >
+                                    <span className="font-bold">&gt;</span>
+                                </button>
+                                <button
+                                    onClick={() => goToPage(totalPages)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Last Page"
+                                >
+                                    <span className="font-bold">&gt;|</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="font-medium">
+                            Displaying {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} items
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Hidden Printable Section */}

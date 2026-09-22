@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Search, Loader2, AlertCircle, CheckCircle2, RotateCcw, FileText, Calendar, Download, IndianRupee, CreditCard, ClipboardList, Wallet, Receipt, Clock, MapPin, X, User, Filter } from 'lucide-react'
 import { API_BASE_URL, STORAGE_URL } from '../config/api'
+import { applyBranchOverrides } from '../utils/branchOverrides'
 
 function ConsignorWiseReceiveWithoutId() {
   const [filters, setFilters] = useState({
@@ -287,9 +288,14 @@ function ConsignorWiseReceiveWithoutId() {
   }
 
   const handlePrintVoucher = (data) => {
-    const printWindow = window.open('', '_blank')
-    const companyName = transport?.transport_name || 'TRANSPORT'
-    const logoUrl = transport?.logo_path ? `${STORAGE_URL}/${transport.logo_path}` : ''
+    const printWindow = window.open('', '_blank');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const overrides = applyBranchOverrides(user, {
+        company_name: transport?.transport_name || 'TRANSPORT',
+        logo_path: transport?.logo_path ? `${STORAGE_URL}/${transport.logo_path}` : ''
+    });
+    const companyName = overrides.company_name;
+    const logoUrl = overrides.logo_path;
 
     printWindow.document.write(`
       <html>
