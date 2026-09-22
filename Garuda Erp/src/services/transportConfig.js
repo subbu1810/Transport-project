@@ -6,6 +6,13 @@ export const STORAGE_KEY_API_URL = 'transport_api_url';
 // Default presets - you can add more transports here anytime!
 export const PRESET_TRANSPORTS = [
   {
+    code: 'MALLIKARJUNA',
+    name: 'Mallikarjuna Transport',
+    apiUrl: 'https://mallikarjuna-api.ssquareg.tech/api/v1',
+    description: 'Mallikarjuna Transport Logistics',
+    color: '#f59e0b'
+  },
+  {
     code: 'LIFE',
     name: 'Life Transport',
     apiUrl: 'https://api.lifetransport.ssquareg.com/api/v1',

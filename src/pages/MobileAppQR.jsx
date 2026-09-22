@@ -1,10 +1,17 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { QrCode, Printer, Smartphone, Wifi, RefreshCw, CheckCircle2, Copy, Building2 } from "lucide-react";
 import QRCode from "qrcode";
 import { API_BASE_URL } from "../config/api";
 
 // All known transports — matched against the logged-in user's API URL
 const ALL_TRANSPORTS = [
+  {
+    code: "MALLIKARJUNA",
+    name: "Mallikarjuna Transport",
+    apiUrl: "https://mallikarjuna-api.ssquareg.tech/api/v1",
+    bg: "from-amber-500 to-orange-600",
+    light: "bg-amber-50 border-amber-200",
+  },
   {
     code: "LIFE",
     name: "Life Transport",
