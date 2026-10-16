@@ -37,7 +37,7 @@ class WhatsAppController extends Controller
         $token     = $request->input('hub_verify_token');
         $challenge = $request->input('hub_challenge');
 
-        $verifyToken = env('WHATSAPP_VERIFY_TOKEN', '');
+        $verifyToken = env('WHATSAPP_VERIFY_TOKEN') ?: env('META_VERIFY_TOKEN', 'lifetransport_wa_verify_2026');
 
         if ($mode === 'subscribe' && $token === $verifyToken) {
             Log::info('[WhatsApp] Webhook verified successfully.');

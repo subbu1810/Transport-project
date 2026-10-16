@@ -21,6 +21,7 @@ import {
   FileText
 } from 'lucide-react';
 import { communicationService } from '../services/communicationService';
+import { API_BASE_URL } from '../config/api';
 
 export default function Communication() {
   const [activeTab, setActiveTab] = useState('send'); // 'send', 'templates', 'logs', 'settings'
@@ -61,6 +62,23 @@ export default function Communication() {
   const [testNumber, setTestNumber] = useState('');
   const [testingMeta, setTestingMeta] = useState(false);
   const [metaTestResponse, setMetaTestResponse] = useState(null);
+
+  // Webhook and environment helpers
+  const backendBase = (API_BASE_URL || '').replace(/\/api\/v1\/?$/, '');
+  const isLocalhost = backendBase.includes('localhost') || backendBase.includes('127.0.0.1');
+  const [customTunnelUrl, setCustomTunnelUrl] = useState(() => localStorage.getItem('wa_custom_tunnel_url') || '');
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  const copyToClipboard = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const activeWebhookUrl = customTunnelUrl.trim()
+    ? `${customTunnelUrl.trim().replace(/\/+$/, '')}/api/whatsapp/webhook`
+    : `${backendBase}/api/whatsapp/webhook`;
 
   const availableTags = [
     { tag: '{{name}}', desc: 'Recipient Name' },
@@ -761,10 +779,76 @@ export default function Communication() {
                 <div>WHATSAPP_VERIFY_TOKEN=your_custom_verify_token</div>
               </div>
 
-              <div className="pt-2">
-                <div className="text-xs font-semibold text-gray-700 mb-1">Webhook Callback URL:</div>
-                <div className="p-2.5 bg-white border border-gray-300 rounded-xl font-mono text-xs text-gray-700 select-all">
-                  https://api.lifetransport.ssquareg.com/api/whatsapp/webhook
+              <div className="pt-2 space-y-3">
+                {isLocalhost && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs text-amber-900">
+                    <div className="font-semibold flex items-center gap-1.5 text-amber-800">
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                      <span>Local Backend Active ({backendBase})</span>
+                    </div>
+                    <p className="text-[11px] text-amber-700 leading-relaxed">
+                      Meta Cloud API requires a public HTTPS URL to deliver incoming webhook callbacks. For local webhook testing, run a tunnel like <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-semibold">ngrok http 8000</code> and paste your tunnel address below:
+                    </p>
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="e.g. https://xyz.ngrok-free.app"
+                        value={customTunnelUrl}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomTunnelUrl(val);
+                          localStorage.setItem('wa_custom_tunnel_url', val);
+                        }}
+                        className="flex-1 px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-mono focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      />
+                      {customTunnelUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomTunnelUrl('');
+                            localStorage.removeItem('wa_custom_tunnel_url');
+                          }}
+                          className="text-[11px] text-amber-700 hover:text-amber-900 underline whitespace-nowrap"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-700">Webhook Callback URL:</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(activeWebhookUrl, 'webhook_url')}
+                      className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                    >
+                      {copiedKey === 'webhook_url' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey === 'webhook_url' ? 'Copied!' : 'Copy URL'}
+                    </button>
+                  </div>
+                  <div className="p-2.5 bg-white border border-gray-300 rounded-xl font-mono text-xs text-gray-700 break-all select-all flex items-center justify-between">
+                    <span>{activeWebhookUrl}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-700">Verify Token:</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard('lifetransport_wa_verify_2026', 'verify_token')}
+                      className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                    >
+                      {copiedKey === 'verify_token' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey === 'verify_token' ? 'Copied!' : 'Copy Token'}
+                    </button>
+                  </div>
+                  <div className="p-2.5 bg-white border border-gray-300 rounded-xl font-mono text-xs text-gray-700 select-all">
+                    lifetransport_wa_verify_2026
+                  </div>
                 </div>
               </div>
             </div>
