@@ -18,12 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  PRESET_TRANSPORTS,
   getTransportConfig,
   setTransportConfig,
+  getSavedTransports,
+  removeSavedTransport,
   parseQRData
 } from '../services/transportConfig';
-
 
 export default function CompanySetupScreen({ navigation, route }) {
   const canCancel = route.params?.canCancel ?? false;
@@ -34,14 +34,21 @@ export default function CompanySetupScreen({ navigation, route }) {
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentConfig, setCurrentConfig] = useState(null);
+  const [savedTransports, setSavedTransports] = useState([]);
 
   useEffect(() => {
-    loadCurrent();
+    loadData();
   }, []);
 
-  const loadCurrent = async () => {
-    const cfg = await getTransportConfig();
-    setCurrentConfig(cfg);
+  const loadData = async () => {
+    try {
+      const cfg = await getTransportConfig();
+      const saved = await getSavedTransports();
+      setCurrentConfig(cfg);
+      setSavedTransports(saved || []);
+    } catch (e) {
+      console.error('Error loading transport data:', e);
+    }
   };
 
   const handleBarcodeScanned = async ({ data }) => {
@@ -75,7 +82,7 @@ export default function CompanySetupScreen({ navigation, route }) {
 
   const handleManualSubmit = async () => {
     if (!manualCode.trim()) {
-      Alert.alert('Input Required', 'Please enter a Transport Code or URL.');
+      Alert.alert('Input Required', 'Please enter a Transport API URL or QR code data.');
       return;
     }
 
@@ -84,7 +91,7 @@ export default function CompanySetupScreen({ navigation, route }) {
       const parsed = parseQRData(manualCode.trim());
       await applyConfig(parsed);
     } catch (err) {
-      Alert.alert('Invalid Code', err.message || 'Could not connect with this code.');
+      Alert.alert('Invalid Input', err.message || 'Could not connect with the provided details.');
     } finally {
       setLoading(false);
     }
@@ -92,14 +99,19 @@ export default function CompanySetupScreen({ navigation, route }) {
 
   const applyConfig = async (config) => {
     try {
-      await setTransportConfig(config);
-      // Clear previous user session when switching to a new company
+      const saved = await setTransportConfig(config);
+      // Clear previous user session when switching/connecting to a new company
       await AsyncStorage.removeItem('user');
       await AsyncStorage.removeItem('token');
-      setCurrentConfig(config);
+      setCurrentConfig(saved);
+
+      // Refresh list of saved transports
+      const updatedSaved = await getSavedTransports();
+      setSavedTransports(updatedSaved || []);
+
       Alert.alert(
         'Connected Successfully! 🎉',
-        `App is now connected to:\n\n${config.name} (${config.code})`,
+        `App is now connected to:\n\n${saved.name} (${saved.code})`,
         [
           {
             text: 'Continue to Login',
@@ -108,10 +120,27 @@ export default function CompanySetupScreen({ navigation, route }) {
         ]
       );
     } catch (e) {
-      Alert.alert('Error', 'Failed to save configuration.');
+      Alert.alert('Error', 'Failed to save transport configuration.');
     }
   };
 
+  const handleDeleteSaved = (item) => {
+    Alert.alert(
+      'Remove Transport',
+      `Are you sure you want to remove "${item.name}" from your saved list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await removeSavedTransport(item.code || item.apiUrl);
+            await loadData();
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -141,7 +170,7 @@ export default function CompanySetupScreen({ navigation, route }) {
           />
           <Text style={styles.mainTitle}>Connect Your Transport</Text>
           <Text style={styles.subtitle}>
-            Scan the QR code displayed at your transport office or select your company below.
+            Scan the QR code displayed at your transport branch office to link this device.
           </Text>
         </View>
 
@@ -149,7 +178,7 @@ export default function CompanySetupScreen({ navigation, route }) {
         {currentConfig && (
           <View style={styles.currentCard}>
             <View style={styles.currentIconBox}>
-              <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+              <Ionicons name="checkmark-circle" size={26} color="#10b981" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.currentLabel}>Currently Connected To:</Text>
@@ -159,7 +188,7 @@ export default function CompanySetupScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* PRIMARY: Scan QR Button */}
+        {/* PRIMARY ACTION: Scan QR Button */}
         <TouchableOpacity
           style={styles.scanPrimaryBtn}
           onPress={openCamera}
@@ -167,79 +196,110 @@ export default function CompanySetupScreen({ navigation, route }) {
           disabled={loading}
         >
           <View style={styles.scanIconCircle}>
-            <Ionicons name="qr-code-outline" size={32} color="#2563eb" />
+            <Ionicons name="qr-code-outline" size={30} color="#2563eb" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.scanPrimaryText}>Scan Transport QR Code</Text>
-            <Text style={styles.scanSecondaryText}>Point camera at company barcode</Text>
+            <Text style={styles.scanSecondaryText}>Point camera at company barcode / QR</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </TouchableOpacity>
 
-        {/* Divider */}
+        {/* SAVED TRANSPORTS IN MEMORY (Only rendered if previously scanned) */}
+        {savedTransports.length > 0 ? (
+          <View style={styles.savedSection}>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>SAVED TRANSPORTS ON THIS DEVICE</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <View style={styles.presetsContainer}>
+              {savedTransports.map((item, idx) => {
+                const isActive = currentConfig?.apiUrl === item.apiUrl;
+                return (
+                  <TouchableOpacity
+                    key={item.code || item.apiUrl || idx}
+                    style={[
+                      styles.presetCard,
+                      isActive && styles.presetCardActive
+                    ]}
+                    onPress={() => applyConfig(item)}
+                    activeOpacity={0.7}
+                    disabled={loading}
+                  >
+                    <View style={[styles.presetDot, { backgroundColor: item.color || '#2563eb' }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.presetName}>{item.name}</Text>
+                      <Text style={styles.presetCode}>Code: {item.code}</Text>
+                    </View>
+                    
+                    {isActive ? (
+                      <View style={styles.activePill}>
+                        <Ionicons name="checkmark" size={14} color="#ffffff" style={{ marginRight: 2 }} />
+                        <Text style={styles.activePillText}>Active</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.selectText}>Select</Text>
+                    )}
+
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => handleDeleteSaved(item)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#94a3b8" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : (
+          /* Empty / Fresh state prompt */
+          <View style={styles.emptyStateCard}>
+            <Ionicons name="information-circle-outline" size={24} color="#64748b" style={{ marginBottom: 6 }} />
+            <Text style={styles.emptyStateTitle}>No Transport Linked</Text>
+            <Text style={styles.emptyStateText}>
+              Scan the QR code provided by your transport company to link and activate this app.
+            </Text>
+          </View>
+        )}
+
+        {/* Divider for manual entry */}
         <View style={styles.dividerRow}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR QUICK SELECT</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Preset Companies List */}
-        <View style={styles.presetsContainer}>
-          {PRESET_TRANSPORTS.map((item) => (
-            <TouchableOpacity
-              key={item.code}
-              style={[
-                styles.presetCard,
-                currentConfig?.code === item.code && styles.presetCardActive
-              ]}
-              onPress={() => applyConfig(item)}
-              activeOpacity={0.7}
-              disabled={loading}
-            >
-              <View style={[styles.presetDot, { backgroundColor: item.color || '#2563eb' }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.presetName}>{item.name}</Text>
-                <Text style={styles.presetCode}>Code: {item.code}</Text>
-              </View>
-              {currentConfig?.code === item.code ? (
-                <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-              ) : (
-                <Text style={styles.selectText}>Select</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Divider */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR ENTER CODE MANUALLY</Text>
+          <Text style={styles.dividerText}>OR ENTER API URL MANUALLY</Text>
           <View style={styles.dividerLine} />
         </View>
 
         {/* Manual Code Input */}
         <View style={styles.manualCard}>
           <View style={styles.inputContainer}>
-            <Ionicons name="key-outline" size={20} color="#64748b" style={{ marginRight: 10 }} />
+            <Ionicons name="link-outline" size={20} color="#64748b" style={{ marginRight: 10 }} />
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. LIFE, GARUDA, or API URL"
+              placeholder="e.g. https://api.yourtransport.com/api/v1"
               placeholderTextColor="#94a3b8"
               value={manualCode}
               onChangeText={setManualCode}
-              autoCapitalize="characters"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 
           <TouchableOpacity
-            style={styles.connectBtn}
+            style={[
+              styles.connectBtn,
+              (!manualCode.trim() || loading) && styles.connectBtnDisabled
+            ]}
             onPress={handleManualSubmit}
             disabled={loading || !manualCode.trim()}
           >
             {loading ? (
               <ActivityIndicator color="#ffffff" size="small" />
             ) : (
-              <Text style={styles.connectBtnText}>Connect</Text>
+              <Text style={styles.connectBtnText}>Connect Manually</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -354,16 +414,17 @@ const styles = StyleSheet.create({
     borderColor: '#a7f3d0',
     borderRadius: 14,
     padding: 14,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   currentIconBox: {
     marginRight: 12,
   },
   currentLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#059669',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   currentName: {
     fontSize: 16,
@@ -382,24 +443,24 @@ const styles = StyleSheet.create({
     borderColor: '#2563eb',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     elevation: 3,
     shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
   },
   scanIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#eff6ff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
   scanPrimaryText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: '#1e3a8a',
     marginBottom: 2,
@@ -407,6 +468,9 @@ const styles = StyleSheet.create({
   scanSecondaryText: {
     fontSize: 12,
     color: '#64748b',
+  },
+  savedSection: {
+    marginBottom: 10,
   },
   dividerRow: {
     flexDirection: 'row',
@@ -424,9 +488,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#94a3b8',
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
   presetsContainer: {
-    marginBottom: 10,
+    marginBottom: 4,
   },
   presetCard: {
     flexDirection: 'row',
@@ -458,10 +523,52 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 2,
   },
+  activePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10b981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  activePillText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   selectText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#2563eb',
+    marginRight: 10,
+  },
+  deleteBtn: {
+    padding: 4,
+  },
+  emptyStateCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
+    marginBottom: 10,
+  },
+  emptyStateTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  emptyStateText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 10,
   },
   manualCard: {
     backgroundColor: '#ffffff',
@@ -483,7 +590,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#0f172a',
   },
@@ -493,6 +600,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  connectBtnDisabled: {
+    backgroundColor: '#94a3b8',
+    opacity: 0.7,
   },
   connectBtnText: {
     color: '#ffffff',

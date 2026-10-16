@@ -68,6 +68,23 @@ export default function LoginScreen({ navigation }) {
 
     try {
       setLoading(true);
+
+      const config = await getTransportConfig();
+      if (!config || !config.apiUrl) {
+        setLoading(false);
+        Alert.alert(
+          'Transport Not Linked',
+          'Please scan or connect your transport QR code first.',
+          [
+            {
+              text: 'Setup Transport',
+              onPress: () => navigation.replace('CompanySetup')
+            }
+          ]
+        );
+        return;
+      }
+
       // The backend expects 'name' and 'password'
       const response = await api.post('/admins/login', { name: username, password });
       

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, 
-  Alert, SafeAreaView, ActivityIndicator, LayoutAnimation, UIManager, Platform, Image, Linking 
+  Alert, SafeAreaView, ActivityIndicator, LayoutAnimation, UIManager, Platform, Image, Linking, Share, Modal, Pressable
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { API_URL } from '../services/api';
+import { getCachedApiUrl } from '../services/transportConfig';
 import { getErrorMessage } from '../utils/errorHandler';
-
-const STORAGE_URL = API_URL.replace('/api/v1', '/storage');
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -39,6 +38,71 @@ export default function GCTrackScreen({ navigation }) {
   const [gcNumber, setGcNumber] = useState('');
   const [trackingData, setTrackingData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
+  // Helper to dynamically resolve full POD URL based on active transport
+  const getPodUrl = (deliveryProof) => {
+    if (!deliveryProof) return '';
+    if (deliveryProof.startsWith('http://') || deliveryProof.startsWith('https://')) {
+      return deliveryProof;
+    }
+    const baseUrl = getCachedApiUrl() || API_URL || 'https://api.lifetransport.ssquareg.com/api/v1';
+    const storageBase = baseUrl.replace(/\/api(?:\/v1)?\/?$/, '/storage');
+    return `${storageBase}/${deliveryProof.replace(/^\/+/, '')}`;
+  };
+
+  const handleDownloadPOD = async (podUrl, gcNum) => {
+    try {
+      if (!podUrl) {
+        Alert.alert('Error', 'POD URL is not available.');
+        return;
+      }
+      const supported = await Linking.canOpenURL(podUrl);
+      if (supported) {
+        await Linking.openURL(podUrl);
+      } else {
+        await Linking.openURL(podUrl);
+      }
+    } catch (err) {
+      Alert.alert('Download Error', 'Could not open POD download link: ' + err.message);
+    }
+  };
+
+  const handleSharePOD = async (podUrl, gc) => {
+    try {
+      if (!podUrl) {
+        Alert.alert('Error', 'POD file is not available to share.');
+        return;
+      }
+
+      const gcNum = gc?.gc_number || gcNumber;
+      const status = gc?.status || 'Delivered';
+      const from = gc?.origin_branch?.branch_name || 'Origin';
+      const to = gc?.destination?.city_name || gc?.destination?.branch_name || 'Destination';
+      const consignor = gc?.consignor?.name || 'Consignor';
+      const consignee = gc?.consignee?.name || 'Consignee';
+
+      const shareMessage = 
+`📦 *Garuda ERP - Proof of Delivery (POD)*
+━━━━━━━━━━━━━━━━━━━━━━
+📄 *GC Number:* ${gcNum}
+📊 *Status:* ${status}
+📍 *Route:* ${from} ➔ ${to}
+🏢 *Consignor:* ${consignor}
+👤 *Consignee:* ${consignee}
+
+🔗 *Download / View POD Attachment:*
+${podUrl}`;
+
+      await Share.share({
+        title: `POD - GC #${gcNum}`,
+        message: shareMessage,
+        url: podUrl // iOS native sharing URL
+      });
+    } catch (err) {
+      console.error('Share error:', err);
+    }
+  };
 
   const searchGC = async () => {
     if (!gcNumber.trim()) {
@@ -148,43 +212,48 @@ export default function GCTrackScreen({ navigation }) {
     // Pending state
     if (!trackingData.status?.toUpperCase().includes('DELIVERED') && trackingData.status?.toUpperCase() !== 'CANCELLED') {
        timeline.push({
-         title: 'Awaiting Arrival',
-         date: '—',
-         desc: 'Shipment is in transit.',
-         icon: 'time',
-         color: '#cbd5e1',
+         title: 'In Transit',
+         date: 'Pending',
+         desc: 'Awaiting final delivery and POD upload.',
+         icon: 'hourglass-outline',
+         color: '#94a3b8',
          done: false
        });
     }
 
     return (
       <View style={styles.card}>
-        <View style={[styles.cardHeader, { backgroundColor: '#334155' }]}>
+        <View style={[styles.cardHeader, { backgroundColor: '#0f172a' }]}>
           <Ionicons name="git-commit" size={16} color="#ffffff" style={{ marginRight: 8 }} />
-          <Text style={styles.cardHeaderTitle}>Tracking Lifecycle</Text>
+          <Text style={styles.cardHeaderTitle}>Tracking Timeline</Text>
         </View>
         <View style={styles.cardBody}>
-          {timeline.map((item, index) => (
-             <View key={index} style={styles.timelineRow}>
-               <View style={styles.timelineIconBox}>
-                  <View style={[styles.timelineIcon, { backgroundColor: item.done ? item.color : '#f1f5f9' }]}>
-                    <Ionicons name={item.icon} size={16} color={item.done ? '#fff' : '#cbd5e1'} />
-                  </View>
-                  {index < timeline.length - 1 && <View style={[styles.timelineLine, { backgroundColor: item.done ? item.color : '#e2e8f0' }]} />}
-               </View>
-               <View style={styles.timelineContent}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                     <Text style={[styles.timelineTitle, { color: item.done ? '#0f172a' : '#94a3b8' }]}>{item.title}</Text>
-                     <Text style={styles.timelineDate}>{item.date}</Text>
-                  </View>
-                  <Text style={styles.timelineDesc}>{item.desc}</Text>
-               </View>
-             </View>
+          {timeline.map((item, idx) => (
+            <View key={idx} style={styles.timelineRow}>
+              <View style={styles.timelineIconBox}>
+                <View style={[styles.timelineIcon, { backgroundColor: item.color }]}>
+                  <Ionicons name={item.icon} size={14} color="#ffffff" />
+                </View>
+                {idx !== timeline.length - 1 && (
+                  <View style={[styles.timelineLine, { backgroundColor: item.done ? item.color : '#e2e8f0' }]} />
+                )}
+              </View>
+              <View style={styles.timelineContent}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[styles.timelineTitle, { color: item.done ? '#0f172a' : '#94a3b8' }]}>{item.title}</Text>
+                  <Text style={styles.timelineDate}>{item.date}</Text>
+                </View>
+                <Text style={styles.timelineDesc}>{item.desc}</Text>
+              </View>
+            </View>
           ))}
         </View>
       </View>
     );
   };
+
+  const podUrl = trackingData?.delivery_proof ? getPodUrl(trackingData.delivery_proof) : '';
+  const isPdf = trackingData?.delivery_proof?.toLowerCase().endsWith('.pdf');
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -192,61 +261,58 @@ export default function GCTrackScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0f172a" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>GC Live Tracking</Text>
+        <Text style={styles.headerTitle}>GC Tracking & POD</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        
-        {/* HERO SEARCH HEADER */}
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* Search Hero Card */}
         <View style={styles.heroCard}>
           <View style={styles.heroHeader}>
             <View style={styles.heroIconBox}>
-              <Ionicons name="flash" size={24} color="#fbc02d" />
+              <Ionicons name="search" size={24} color="#fbc02d" />
             </View>
             <View>
-              <Text style={styles.heroTitle}>Track Shipment</Text>
-              <Text style={styles.heroSubtitle}>Real-time status & journey history</Text>
+              <Text style={styles.heroTitle}>Live Consignment Track</Text>
+              <Text style={styles.heroSubtitle}>Instant status, route & POD delivery proof</Text>
             </View>
           </View>
-          
           <View style={styles.searchRow}>
             <View style={styles.searchInputContainer}>
-              <Ionicons name="search" size={20} color="rgba(255,255,255,0.6)" style={{ marginRight: 8 }} />
-              <TextInput 
-                style={styles.searchInput} 
-                placeholder="Enter GC Number..." 
+              <Ionicons name="barcode-outline" size={20} color="#ffffff" style={{ marginRight: 8, opacity: 0.8 }} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Enter GC Number"
                 placeholderTextColor="rgba(255,255,255,0.6)"
-                value={gcNumber} 
-                onChangeText={setGcNumber} 
+                value={gcNumber}
+                onChangeText={setGcNumber}
                 autoCapitalize="characters"
+                autoCorrect={false}
               />
             </View>
-            <TouchableOpacity 
-              style={[styles.searchBtn, loading && { opacity: 0.7 }]}
-              onPress={searchGC}
-              disabled={loading || !gcNumber}
-            >
-              {loading ? <ActivityIndicator color="#1b2e0a" /> : <Text style={styles.searchBtnText}>Track</Text>}
+            <TouchableOpacity style={styles.searchBtn} onPress={searchGC} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#0f172a" size="small" />
+              ) : (
+                <Text style={styles.searchBtnText}>Track</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* EMPTY STATE */}
         {!trackingData && !loading && (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconBox}>
-              <Ionicons name="cube-outline" size={40} color="#cbd5e1" />
+              <Ionicons name="trail-sign-outline" size={48} color="#94a3b8" />
             </View>
-            <Text style={styles.emptyTitle}>Track Your Shipment</Text>
-            <Text style={styles.emptyDesc}>Enter a GC Number above to see real-time tracking details</Text>
+            <Text style={styles.emptyTitle}>No GC Loaded</Text>
+            <Text style={styles.emptyDesc}>Enter a GC / LR Number above to view complete consignment route, status and download POD.</Text>
           </View>
         )}
 
-        {/* RESULTS */}
         {trackingData && (
           <View style={styles.resultsContainer}>
-            {/* OVERVIEW BANNER */}
+            {/* OVERVIEW CARD */}
             <View style={styles.overviewCard}>
               <View style={styles.overviewHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -383,6 +449,101 @@ export default function GCTrackScreen({ navigation }) {
             {/* TRACKING LIFECYCLE */}
             {renderTimeline()}
 
+            {/* PROOF OF DELIVERY (POD) WITH DOWNLOAD & SHARE */}
+            <View style={styles.card}>
+              <View style={[styles.cardHeader, { backgroundColor: '#059669' }]}>
+                <Ionicons name="checkmark-done-circle" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.cardHeaderTitle}>Proof of Delivery (POD)</Text>
+              </View>
+              <View style={styles.cardBody}>
+                {trackingData.delivery_proof ? (
+                  <View>
+                    {isPdf ? (
+                      /* PDF POD VIEW */
+                      <View style={styles.podPdfCard}>
+                        <View style={styles.pdfIconCircle}>
+                          <Ionicons name="document-text" size={36} color="#dc2626" />
+                        </View>
+                        <Text style={styles.podPdfTitle}>PDF Proof of Delivery</Text>
+                        <Text style={styles.podPdfSub}>Attached delivery receipt document</Text>
+
+                        {/* Action Buttons */}
+                        <View style={styles.podActionRow}>
+                          <TouchableOpacity 
+                            style={[styles.podBtn, styles.podDownloadBtn]}
+                            onPress={() => handleDownloadPOD(podUrl, trackingData.gc_number)}
+                          >
+                            <Ionicons name="download-outline" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                            <Text style={styles.podBtnText}>Download PDF</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            style={[styles.podBtn, styles.podShareBtn]}
+                            onPress={() => handleSharePOD(podUrl, trackingData)}
+                          >
+                            <Ionicons name="share-social-outline" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                            <Text style={styles.podBtnText}>Share POD</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      /* IMAGE POD VIEW */
+                      <View>
+                        <TouchableOpacity 
+                          onPress={() => setIsImageModalOpen(true)}
+                          activeOpacity={0.9}
+                          style={styles.podImageWrapper}
+                        >
+                          <Image 
+                            source={{ uri: podUrl }} 
+                            style={styles.podImage}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.tapToZoomBadge}>
+                            <Ionicons name="expand-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                            <Text style={styles.tapToZoomText}>Tap to View Fullscreen</Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* Image Action Buttons */}
+                        <View style={styles.podActionRow}>
+                          <TouchableOpacity 
+                            style={[styles.podBtn, styles.podDownloadBtn]}
+                            onPress={() => handleDownloadPOD(podUrl, trackingData.gc_number)}
+                          >
+                            <Ionicons name="download-outline" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                            <Text style={styles.podBtnText}>Download</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            style={[styles.podBtn, styles.podShareBtn]}
+                            onPress={() => handleSharePOD(podUrl, trackingData)}
+                          >
+                            <Ionicons name="share-social-outline" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                            <Text style={styles.podBtnText}>Share</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity 
+                            style={[styles.podBtn, styles.podFullscreenBtn]}
+                            onPress={() => setIsImageModalOpen(true)}
+                          >
+                            <Ionicons name="eye-outline" size={18} color="#334155" style={{ marginRight: 4 }} />
+                            <Text style={styles.podBtnDarkText}>View</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.emptyStateInner}>
+                    <Ionicons name="image-outline" size={36} color="#cbd5e1" />
+                    <Text style={styles.emptyTitleInner}>No POD Uploaded Yet</Text>
+                    <Text style={styles.emptyDescInner}>Proof of delivery will appear here once uploaded by the branch or driver.</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
             {/* RATE & ARTICLE DETAILS */}
             <View style={styles.card}>
               <View style={[styles.cardHeader, { backgroundColor: '#475569' }]}>
@@ -428,42 +589,53 @@ export default function GCTrackScreen({ navigation }) {
               </View>
             </View>
 
-            {/* PROOF OF DELIVERY (POD) */}
-            <View style={styles.card}>
-              <View style={[styles.cardHeader, { backgroundColor: '#059669' }]}>
-                <Ionicons name="image" size={16} color="#ffffff" style={{ marginRight: 8 }} />
-                <Text style={styles.cardHeaderTitle}>Proof of Delivery (POD)</Text>
-              </View>
-              <View style={styles.cardBody}>
-                {trackingData.delivery_proof ? (
-                  trackingData.delivery_proof.toLowerCase().endsWith('.pdf') ? (
-                     <TouchableOpacity 
-                        style={styles.podPdfBtn}
-                        onPress={() => Linking.openURL(`${STORAGE_URL}/${trackingData.delivery_proof}`)}
-                     >
-                       <Ionicons name="document-text" size={32} color="#dc2626" />
-                       <Text style={styles.podPdfText}>View PDF Document</Text>
-                     </TouchableOpacity>
-                  ) : (
-                     <Image 
-                       source={{ uri: `${STORAGE_URL}/${trackingData.delivery_proof}` }} 
-                       style={styles.podImage}
-                       resizeMode="cover"
-                     />
-                  )
-                ) : (
-                  <View style={styles.emptyStateInner}>
-                    <Ionicons name="image-outline" size={32} color="#cbd5e1" />
-                    <Text style={styles.emptyTitleInner}>No POD Uploaded Yet</Text>
-                    <Text style={styles.emptyDescInner}>POD will appear here once delivered.</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            
           </View>
         )}
       </ScrollView>
+
+      {/* FULLSCREEN POD IMAGE MODAL */}
+      <Modal visible={isImageModalOpen} transparent={true} animationType="fade">
+        <SafeAreaView style={styles.modalBackdrop}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalCloseBtn}
+              onPress={() => setIsImageModalOpen(false)}
+            >
+              <Ionicons name="close" size={26} color="#ffffff" />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              POD - GC #{trackingData?.gc_number}
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity 
+                style={styles.modalActionBtn}
+                onPress={() => handleSharePOD(podUrl, trackingData)}
+              >
+                <Ionicons name="share-social-outline" size={22} color="#ffffff" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalActionBtn}
+                onPress={() => handleDownloadPOD(podUrl, trackingData?.gc_number)}
+              >
+                <Ionicons name="download-outline" size={22} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.modalImageContainer}>
+            {podUrl ? (
+              <Image 
+                source={{ uri: podUrl }} 
+                style={styles.modalFullscreenImage}
+                resizeMode="contain"
+              />
+            ) : null}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -472,6 +644,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f8fafc' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  backBtn: { padding: 4 },
   container: { padding: 15, paddingBottom: 40 },
   
   heroCard: { backgroundColor: '#15803d', borderRadius: 20, padding: 20, marginBottom: 20, overflow: 'hidden', elevation: 8, shadowColor: '#15803d', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
@@ -549,7 +722,137 @@ const styles = StyleSheet.create({
   grandTotalLabel: { fontSize: 14, color: '#0f172a', fontWeight: '900', textTransform: 'uppercase' },
   grandTotalValue: { fontSize: 16, color: '#047857', fontWeight: '900' },
 
-  podImage: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#f1f5f9' },
-  podPdfBtn: { backgroundColor: '#fef2f2', padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fecaca' },
-  podPdfText: { color: '#dc2626', fontWeight: '800', marginTop: 10, fontSize: 13 }
+  // POD CUSTOM STYLES
+  podPdfCard: {
+    backgroundColor: '#fef2f2',
+    padding: 18,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  pdfIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  podPdfTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#991b1b',
+    marginBottom: 2,
+  },
+  podPdfSub: {
+    fontSize: 12,
+    color: '#b91c1c',
+    marginBottom: 16,
+  },
+  podImageWrapper: {
+    position: 'relative',
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  podImage: { 
+    width: '100%', 
+    height: 220, 
+    borderRadius: 14, 
+    backgroundColor: '#f1f5f9' 
+  },
+  tapToZoomBadge: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  tapToZoomText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  podActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  podBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+  },
+  podDownloadBtn: {
+    backgroundColor: '#2563eb',
+  },
+  podShareBtn: {
+    backgroundColor: '#059669',
+  },
+  podFullscreenBtn: {
+    flex: 0.6,
+    backgroundColor: '#e2e8f0',
+  },
+  podBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  podBtnDarkText: {
+    color: '#1e293b',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // FULLSCREEN MODAL STYLES
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  modalCloseBtn: {
+    padding: 6,
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 10,
+  },
+  modalActionBtn: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+  },
+  modalImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  modalFullscreenImage: {
+    width: '100%',
+    height: '100%',
+  },
 });

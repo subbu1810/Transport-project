@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, ScrollView, 
-  TextInput, Alert, ActivityIndicator, SafeAreaView, Modal, Image
+  TextInput, Alert, ActivityIndicator, SafeAreaView, Modal, Image, Linking, Share
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import api from '../services/api';
+import api, { API_URL } from '../services/api';
+import { getCachedApiUrl } from '../services/transportConfig';
 import { getErrorMessage } from '../utils/errorHandler';
 
 export default function UploadPODScreen({ navigation }) {
@@ -19,6 +20,61 @@ export default function UploadPODScreen({ navigation }) {
   
   const [selectedImage, setSelectedImage] = useState(null);
   const [uploading, setUploading] = useState(false);
+
+  // Helper to dynamically resolve full POD URL based on active transport
+  const getPodUrl = (deliveryProof) => {
+    if (!deliveryProof) return '';
+    if (deliveryProof.startsWith('http://') || deliveryProof.startsWith('https://')) {
+      return deliveryProof;
+    }
+    const baseUrl = getCachedApiUrl() || API_URL || 'https://api.lifetransport.ssquareg.com/api/v1';
+    const storageBase = baseUrl.replace(/\/api(?:\/v1)?\/?$/, '/storage');
+    return `${storageBase}/${deliveryProof.replace(/^\/+/, '')}`;
+  };
+
+  const handleDownloadPOD = async (podUrl) => {
+    try {
+      if (!podUrl) {
+        Alert.alert('Error', 'POD URL is not available.');
+        return;
+      }
+      await Linking.openURL(podUrl);
+    } catch (err) {
+      Alert.alert('Download Error', 'Could not open POD download link: ' + err.message);
+    }
+  };
+
+  const handleSharePOD = async (podUrl, gc) => {
+    try {
+      if (!podUrl) {
+        Alert.alert('Error', 'POD file is not available to share.');
+        return;
+      }
+
+      const gcNum = gc?.gc_number || gcNumber;
+      const status = gc?.status || 'Delivered';
+      const from = gc?.origin_branch?.branch_name || 'Origin';
+      const to = gc?.destination?.city_name || gc?.destination?.branch_name || 'Destination';
+
+      const shareMessage = 
+`📦 *Garuda ERP - Proof of Delivery (POD)*
+━━━━━━━━━━━━━━━━━━━━━━
+📄 *GC Number:* ${gcNum}
+📊 *Status:* ${status}
+📍 *Route:* ${from} ➔ ${to}
+
+🔗 *Download / View POD:*
+${podUrl}`;
+
+      await Share.share({
+        title: `POD - GC #${gcNum}`,
+        message: shareMessage,
+        url: podUrl
+      });
+    } catch (err) {
+      console.error('Share error:', err);
+    }
+  };
 
   const handleSearch = async (searchGcNumber = gcNumber) => {
     const numToSearch = (typeof searchGcNumber === 'string' ? searchGcNumber : gcNumber).trim().toUpperCase();
@@ -111,7 +167,6 @@ export default function UploadPODScreen({ navigation }) {
     setUploading(true);
 
     const formData = new FormData();
-    // In React Native, FormData expects an object with uri, type, and name for files
     const filename = selectedImage.uri.split('/').pop() || `pod_${gcData.gc_number}.jpg`;
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image/jpeg`;
@@ -131,7 +186,6 @@ export default function UploadPODScreen({ navigation }) {
         Alert.alert('Success', 'POD uploaded successfully!', [
           { text: 'OK', onPress: () => {
               setSelectedImage(null);
-              // Option: Refresh GC data to show the new POD
               handleSearch(); 
           }}
         ]);
@@ -146,13 +200,16 @@ export default function UploadPODScreen({ navigation }) {
     }
   };
 
+  const existingPodUrl = gcData?.delivery_proof ? getPodUrl(gcData.delivery_proof) : null;
+  const isExistingPdf = gcData?.delivery_proof?.toLowerCase().endsWith('.pdf');
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0f172a" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Upload POD</Text>
+        <Text style={styles.headerTitle}>Upload / Manage POD</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -167,6 +224,7 @@ export default function UploadPODScreen({ navigation }) {
               onChangeText={setGcNumber}
               placeholder="e.g. GC-12345"
               autoCapitalize="characters"
+              autoCorrect={false}
             />
             <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
               <Ionicons name="barcode-outline" size={20} color="#fff" />
@@ -200,8 +258,48 @@ export default function UploadPODScreen({ navigation }) {
               <Text style={styles.partyName}>{gcData.consignee?.name}</Text>
             </View>
 
+            {/* EXISTING POD PREVIEW (IF AVAILABLE) */}
+            {existingPodUrl && (
+              <View style={styles.existingPodSection}>
+                <View style={styles.existingHeaderRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#10b981" style={{ marginRight: 6 }} />
+                  <Text style={styles.existingPodTitle}>Current POD on File</Text>
+                </View>
+
+                {isExistingPdf ? (
+                  <View style={styles.existingPdfBox}>
+                    <Ionicons name="document-text" size={32} color="#dc2626" />
+                    <Text style={styles.existingPdfText}>PDF Document Attached</Text>
+                  </View>
+                ) : (
+                  <Image source={{ uri: existingPodUrl }} style={styles.existingPodImage} resizeMode="cover" />
+                )}
+
+                <View style={styles.existingActionRow}>
+                  <TouchableOpacity 
+                    style={[styles.miniBtn, { backgroundColor: '#2563eb' }]}
+                    onPress={() => handleDownloadPOD(existingPodUrl)}
+                  >
+                    <Ionicons name="download-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                    <Text style={styles.miniBtnText}>Download</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.miniBtn, { backgroundColor: '#059669' }]}
+                    onPress={() => handleSharePOD(existingPodUrl, gcData)}
+                  >
+                    <Ionicons name="share-social-outline" size={16} color="#fff" style={{ marginRight: 4 }} />
+                    <Text style={styles.miniBtnText}>Share</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* UPLOAD / RE-UPLOAD SECTION */}
             <View style={styles.uploadSection}>
-              <Text style={styles.sectionTitle}>Proof of Delivery (POD)</Text>
+              <Text style={styles.sectionTitle}>
+                {existingPodUrl ? 'Upload / Replace POD' : 'Upload Proof of Delivery'}
+              </Text>
               
               {selectedImage ? (
                 <View style={styles.imagePreviewContainer}>
@@ -234,7 +332,7 @@ export default function UploadPODScreen({ navigation }) {
                   ) : (
                     <>
                       <Ionicons name="cloud-upload-outline" size={20} color="#fff" style={{marginRight: 8}} />
-                      <Text style={styles.submitBtnText}>Upload POD</Text>
+                      <Text style={styles.submitBtnText}>Submit & Save POD</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -319,12 +417,70 @@ const styles = StyleSheet.create({
   partyLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginTop: 8 },
   partyName: { fontSize: 14, color: '#1e293b', fontWeight: '600' },
   
-  uploadSection: {
-    marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0'
+  // Existing POD Box
+  existingPodSection: {
+    marginTop: 18,
+    padding: 14,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 12,
   },
-  sectionTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a', marginBottom: 16, textTransform: 'uppercase' },
+  existingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  existingPodTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#15803d',
+    textTransform: 'uppercase',
+  },
+  existingPodImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+    marginBottom: 10,
+  },
+  existingPdfBox: {
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  existingPdfText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
+    marginTop: 6,
+  },
+  existingActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  miniBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 38,
+    borderRadius: 8,
+  },
+  miniBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  uploadSection: {
+    marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0'
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '800', color: '#0f172a', marginBottom: 14, textTransform: 'uppercase' },
   actionsRow: {
-    flexDirection: 'row', justifyContent: 'space-around', marginVertical: 12
+    flexDirection: 'row', justifyContent: 'space-around', marginVertical: 10
   },
   actionBtn: {
     alignItems: 'center', justifyContent: 'center',

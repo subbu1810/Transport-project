@@ -6,8 +6,10 @@ import {
   Search, Calendar, Loader2, Download, AlertCircle,
   Building, User, FileText, CheckCircle, Clock,
   DollarSign, PieChart as PieChartIcon, FilterX, RefreshCcw,
-  ChevronUp, ChevronDown, ArrowUpDown, Eye
+  ChevronUp, ChevronDown, ArrowUpDown, Eye, Printer, X
 } from 'lucide-react'
+import GCPrintReceipt from '../components/GCPrintReceipt';
+import { applyBranchOverrides } from '../utils/branchOverrides';
 
 function ConsignorHistoryReport() {
   const currentUser = JSON.parse(localStorage.getItem('user'))
@@ -26,6 +28,12 @@ function ConsignorHistoryReport() {
   const [error, setError] = useState('')
   const [consignors, setConsignors] = useState([])
   const [branches, setBranches] = useState([])
+  const [companyDetails, setCompanyDetails] = useState(null)
+  const [selectedWaybillForPrint, setSelectedWaybillForPrint] = useState(null)
+  const [showPrintModal, setShowPrintModal] = useState(false)
+  const [printMode, setPrintMode] = useState('full')
+  const [printOnlyContent, setPrintOnlyContent] = useState(false)
+
   const [data, setData] = useState({
     stats: {
       booking_details: { total: 0, delivered: 0, pending: 0 },
@@ -55,56 +63,142 @@ function ConsignorHistoryReport() {
 
   const fetchInitialData = async () => {
     try {
-      const [cRes, bRes] = await Promise.all([
+      const userDataRaw = localStorage.getItem('user') || localStorage.getItem('admin');
+      const user = userDataRaw ? JSON.parse(userDataRaw) : {};
+
+      const initialCompany = applyBranchOverrides(user, {
+        company_name: user.transport_name || user.branch?.branch_name || 'Transport Logistics',
+        address: user.transport_address || user.branch?.branch_address || '',
+        phone: user.transport_phone || user.branch?.branch_phone || '',
+        mobile: user.transport_mobile || '',
+        email: user.email || '',
+        gstin: user.transport_gstin || user.gstin || user.gst_number || '',
+        logo_path: user.transport_logo_url || null,
+        upi_qr_path: user.upi_qr_url || null
+      });
+      setCompanyDetails(initialCompany);
+
+      const [cRes, bRes, sRes] = await Promise.allSettled([
         fetch(`${API_BASE_URL}/consignors`),
-        fetch(`${API_BASE_URL}/branches`)
-      ])
-      const cData = await cRes.json()
-      const bData = await bRes.json()
+        fetch(`${API_BASE_URL}/branches`),
+        fetch(`${API_BASE_URL}/settings/all`)
+      ]);
 
-      if (cData.success) {
-        if (currentUser?.role === 'consignor') {
-          // Try consignor_id from localStorage first
-          let assignedConsignorId = currentUser.consignor_id;
+      if (cRes.status === 'fulfilled') {
+        const cData = await cRes.value.json();
+        if (cData.success) {
+          if (currentUser?.role === 'consignor') {
+            // Try consignor_id from localStorage first
+            let assignedConsignorId = currentUser.consignor_id;
 
-          // Fallback: fetch fresh admin record if localStorage is stale (no consignor_id)
-          if (!assignedConsignorId && currentUser?.id) {
-            try {
-              const adminRes = await fetch(`${API_BASE_URL}/users/${currentUser.id}`);
-              const adminData = await adminRes.json();
-              if (adminData.success) {
-                assignedConsignorId = adminData.data?.consignor_id;
-                // Update localStorage with fresh data
-                const updated = { ...currentUser, consignor_id: assignedConsignorId };
-                localStorage.setItem('user', JSON.stringify(updated));
+            // Fallback: fetch fresh admin record if localStorage is stale (no consignor_id)
+            if (!assignedConsignorId && currentUser?.id) {
+              try {
+                const adminRes = await fetch(`${API_BASE_URL}/users/${currentUser.id}`);
+                const adminData = await adminRes.json();
+                if (adminData.success) {
+                  assignedConsignorId = adminData.data?.consignor_id;
+                  // Update localStorage with fresh data
+                  const updated = { ...currentUser, consignor_id: assignedConsignorId };
+                  localStorage.setItem('user', JSON.stringify(updated));
+                }
+              } catch (e) {
+                console.error('Could not fetch admin details:', e);
               }
-            } catch (e) {
-              console.error('Could not fetch admin details:', e);
             }
-          }
 
-          const userConsignor = cData.data.find(c => c.id == assignedConsignorId);
-          setConsignors(userConsignor ? [userConsignor] : []);
-          if (userConsignor) {
-            setFilters(prev => ({ ...prev, consignor_id: userConsignor.id }));
+            const userConsignor = cData.data.find(c => c.id == assignedConsignorId);
+            setConsignors(userConsignor ? [userConsignor] : []);
+            if (userConsignor) {
+              setFilters(prev => ({ ...prev, consignor_id: userConsignor.id }));
+            }
+          } else {
+            setConsignors(cData.data);
           }
-        } else {
-          setConsignors(cData.data);
         }
       }
 
-      if (bData.success) {
-        if (currentUser?.role === 'superadmin') {
-          setBranches(bData.data)
-        } else {
-          const userBranch = bData.data.find(b => b.id === currentUser?.branch_id)
-          setBranches(userBranch ? [userBranch] : [])
+      if (bRes.status === 'fulfilled') {
+        const bData = await bRes.value.json();
+        if (bData.success) {
+          setBranches(bData.data);
+        }
+      }
+
+      if (sRes.status === 'fulfilled') {
+        const sData = await sRes.value.json();
+        if (sData.success && sData.data) {
+          const settings = sData.data;
+          setCompanyDetails(applyBranchOverrides(user, {
+            ...initialCompany,
+            company_name: user.transport_name || settings.company_name || user.branch?.branch_name || 'Transport Logistics',
+            address: user.transport_address || settings.address || user.branch?.branch_address || '',
+            phone: user.transport_phone || settings.phone || user.branch?.branch_phone || '',
+            mobile: user.transport_mobile || settings.mobile || '',
+            email: user.email || settings.email || '',
+            gstin: user.transport_gstin || user.gstin || user.gst_number || settings.gst_number || settings.gstin || '',
+            logo_path: user.transport_logo_url || settings.logo_path || null,
+            upi_qr_path: user.upi_qr_url || settings.upi_qr_path || null,
+            upi_id: settings.upi_id || null,
+            upi_account_holder: settings.upi_account_holder || null
+          }));
         }
       }
     } catch (err) {
-      console.error('Error fetching initial data:', err)
+      console.error('Error fetching initial data:', err);
     }
   }
+
+  const handleOpenPrintModal = (wb, mode = 'full') => {
+    setSelectedWaybillForPrint(wb);
+    setPrintMode(mode);
+    setPrintOnlyContent(mode === 'content');
+    setShowPrintModal(true);
+  };
+
+  const executePrint = () => {
+    const mode = printMode;
+    const printableArea = document.getElementById('printable-gc-receipt');
+    if (!printableArea) {
+      setTimeout(() => window.print(), 100);
+      return;
+    }
+
+    const images = printableArea.querySelectorAll('img');
+    const promises = Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        const timer = setTimeout(() => {
+          img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+          resolve();
+        }, 2000);
+
+        img.onload = () => { clearTimeout(timer); resolve(); };
+        img.onerror = () => { clearTimeout(timer); resolve(); };
+      });
+    });
+
+    Promise.all(promises).then(() => {
+      setTimeout(() => {
+        const originalTitle = document.title;
+        if (selectedWaybillForPrint?.gc_number) {
+          document.title = `GC-${selectedWaybillForPrint.gc_number}`;
+        }
+
+        document.body.classList.add('is-printing-receipt');
+        if (mode === 'content') document.body.classList.add('is-content-only');
+
+        const cleanup = () => {
+          document.title = originalTitle;
+          document.body.classList.remove('is-printing-receipt');
+          document.body.classList.remove('is-content-only');
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        window.print();
+      }, 300);
+    });
+  };
 
   const handleGetDetails = async () => {
     if (!filters.consignor_id) {
@@ -454,7 +548,8 @@ function ConsignorHistoryReport() {
 
   return (
     <div className="p-4 space-y-4 bg-gray-50/50 min-h-screen">
-      {/* Search Header */}
+      <div className="consignor-history-main-content space-y-4">
+        {/* Search Header */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -821,7 +916,7 @@ function ConsignorHistoryReport() {
             <tbody className="divide-y divide-gray-50 text-[11px] font-bold">
               {sortedWaybills.length === 0 ? (
                 <tr>
-                  <td colSpan="15" className="py-20 text-center text-gray-400 italic">
+                  <td colSpan="17" className="py-20 text-center text-gray-400 italic">
                     {loading ? (
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 size={32} className="animate-spin text-blue-500" />
@@ -833,7 +928,16 @@ function ConsignorHistoryReport() {
               ) : sortedWaybills.map((wb, idx) => (
                 <tr key={idx} className="hover:bg-gray-50/50 transition-colors group border-b border-gray-50">
                   <td className="px-3 py-2 text-gray-500 font-mono tracking-tight whitespace-nowrap">{wb.bill_date}</td>
-                  <td className="px-3 py-2 text-blue-600 font-black tracking-tight whitespace-nowrap">{wb.gc_number}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <button
+                      onClick={() => handleOpenPrintModal(wb, 'full')}
+                      title="Click to view & print GC"
+                      className="text-blue-600 hover:text-blue-800 hover:underline font-black tracking-tight cursor-pointer inline-flex items-center gap-1 group text-left"
+                    >
+                      <span>{wb.gc_number}</span>
+                      <Printer size={11} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
+                    </button>
+                  </td>
                   <td className="px-3 py-2 text-gray-600 font-bold whitespace-nowrap tracking-tight">{wb.invoice_no || '---'}</td>
                   <td className="px-3 py-2 uppercase text-gray-700 font-black tracking-tight" title={wb.consignee?.name}>{wb.consignee?.name || 'N/A'}</td>
                   <td className="px-3 py-2 uppercase text-gray-500">{wb.destination?.city_name || 'N/A'}</td>
@@ -857,19 +961,27 @@ function ConsignorHistoryReport() {
                       {wb.account_type}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-center">
-                    {wb.delivery_proof ? (
-                      <a 
-                        href={`${STORAGE_URL}/${wb.delivery_proof}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-all text-[8px] font-black uppercase tracking-widest"
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => handleOpenPrintModal(wb, 'full')}
+                        title="Download / Print Full GC"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded font-black text-[9px] uppercase tracking-wider shadow-sm hover:shadow transition-all active:scale-95"
                       >
-                        <Eye size={10} /> POD
-                      </a>
-                    ) : (
-                      <span className="text-[8px] text-gray-300 font-black uppercase opacity-50 italic">No POD</span>
-                    )}
+                        <Printer size={10} /> Print GC
+                      </button>
+                      {wb.delivery_proof ? (
+                        <a 
+                          href={`${STORAGE_URL}/${wb.delivery_proof}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          title="View Proof of Delivery"
+                          className="inline-flex items-center gap-1 px-1.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition-all text-[9px] font-black uppercase tracking-wider"
+                        >
+                          <Eye size={10} /> POD
+                        </a>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -877,6 +989,221 @@ function ConsignorHistoryReport() {
           </table>
         </div>
       </div>
+      </div>
+
+      {/* Pre-load Barcode Font */}
+      <div style={{ fontFamily: "'Libre Barcode 128'", position: 'absolute', visibility: 'hidden', height: 0 }}>
+        PRELOAD_BARCODE
+      </div>
+
+      {/* Print Preview & Download Modal */}
+      {showPrintModal && selectedWaybillForPrint && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white animate-in fade-in zoom-in duration-200 no-print">
+          {/* Modal Header */}
+          <div className="p-4 border-b flex justify-between items-center bg-gray-50 no-print shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-200">
+                <Printer size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black text-gray-900 uppercase tracking-tight">
+                    GC Print & Download
+                  </h2>
+                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 font-black text-xs rounded-full uppercase tracking-wider border border-blue-200">
+                    GC #{selectedWaybillForPrint.gc_number}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 font-bold mt-0.5">
+                  Consignor: <span className="text-gray-800">{selectedWaybillForPrint.consignor?.name || 'N/A'}</span> &nbsp;|&nbsp; 
+                  Consignee: <span className="text-gray-800">{selectedWaybillForPrint.consignee?.name || 'N/A'}</span> &nbsp;|&nbsp;
+                  Destination: <span className="text-gray-800">{selectedWaybillForPrint.destination?.city_name || 'N/A'}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Print Mode Selector */}
+              <div className="flex items-center bg-gray-200/80 p-1 rounded-xl border border-gray-300">
+                <button
+                  onClick={() => {
+                    setPrintMode('full');
+                    setPrintOnlyContent(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    printMode === 'full' 
+                      ? 'bg-white text-blue-700 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Full Print
+                </button>
+                <button
+                  onClick={() => {
+                    setPrintMode('content');
+                    setPrintOnlyContent(true);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                    printMode === 'content' 
+                      ? 'bg-white text-blue-700 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Content Only
+                </button>
+              </div>
+
+              {/* Print / Download Button */}
+              <button
+                onClick={executePrint}
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-black uppercase text-xs hover:from-blue-700 hover:to-indigo-800 transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95"
+              >
+                <Printer size={16} />
+                <span>Print / Save as PDF</span>
+              </button>
+
+              {/* Close Button */}
+              <button 
+                onClick={() => {
+                  setShowPrintModal(false);
+                  setSelectedWaybillForPrint(null);
+                }} 
+                className="p-2 hover:bg-red-50 hover:text-red-600 rounded-full transition-all text-gray-400 group ml-2"
+              >
+                <X size={24} className="group-hover:rotate-90 transition-transform" />
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Receipt Preview Area */}
+          <div className="flex-1 overflow-auto bg-gray-200/60 p-4 md:p-8 flex justify-center" id="printable-gc-receipt">
+            <div className="bg-white shadow-2xl p-[5mm] md:p-[10mm] min-w-fit h-fit rounded-lg">
+              <GCPrintReceipt
+                waybill={selectedWaybillForPrint}
+                companyDetails={companyDetails}
+                branches={branches}
+                currentUser={currentUser}
+                storageUrl={STORAGE_URL}
+                onlyContent={printOnlyContent}
+              />
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-3 border-t bg-white flex justify-between items-center px-6 no-print text-xs text-gray-500 font-bold shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Standard 3-Copy Format (Consignor, Consignee, Transporter) • Ready for A4 Print / PDF Download
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setShowPrintModal(false);
+                  setSelectedWaybillForPrint(null);
+                }}
+                className="px-5 py-2 bg-gray-100 text-gray-700 rounded-xl font-black uppercase text-xs hover:bg-gray-200 transition-all active:scale-95"
+              >
+                Close Preview
+              </button>
+              <button
+                onClick={executePrint}
+                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-black uppercase text-xs hover:from-blue-700 hover:to-indigo-800 transition-all flex items-center gap-2 shadow-md shadow-blue-200 active:scale-95"
+              >
+                <Printer size={15} />
+                <span>Print / Download PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden Print Container for window.print */}
+      {selectedWaybillForPrint && (
+        <div className="hidden">
+          <div id="printable-gc-receipt-hidden">
+            <GCPrintReceipt
+              waybill={selectedWaybillForPrint}
+              companyDetails={companyDetails}
+              branches={branches}
+              currentUser={currentUser}
+              storageUrl={STORAGE_URL}
+              onlyContent={printOnlyContent}
+            />
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 0mm; }
+
+          .consignor-history-main-content,
+          .no-print,
+          header,
+          nav,
+          aside {
+            display: none !important;
+          }
+
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            overflow: visible !important;
+          }
+
+          #printable-gc-receipt,
+          #printable-gc-receipt > div {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            width: 100% !important;
+            display: block !important;
+          }
+
+          .receipt-container {
+            display: flex !important;
+            flex-direction: column !important;
+            width: 100% !important;
+            height: 290mm !important;
+            overflow: visible !important;
+          }
+
+          .receipt-copy { 
+            display: flex !important;
+            flex-direction: column !important;
+            border: none !important; 
+            box-shadow: none !important; 
+            height: 95mm !important; 
+            max-height: 95mm !important;
+            width: 190mm !important; 
+            margin: 0 auto 2mm auto !important; 
+            padding-top: 4mm !important;
+            overflow: visible !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            box-sizing: border-box !important;
+          }
+
+          body.is-printing-receipt.is-content-only .receipt-copy-1 {
+            padding-top: 12mm !important;
+          }
+          body.is-printing-receipt.is-content-only .receipt-copy-2 {
+            padding-top: 6mm !important;
+          }
+          body.is-printing-receipt.is-content-only .receipt-copy-3 {
+            padding-top: 0mm !important;
+          }
+
+          body.is-printing-receipt:not(.is-content-only) .receipt-copy { 
+            border: 1px solid #000 !important; 
+          }
+
+          .text-red-700, .text-red-800 { color: #000 !important; }
+        }
+      `}</style>
     </div>
   )
 }

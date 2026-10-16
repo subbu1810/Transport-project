@@ -1,16 +1,18 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import { Text, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen from '../screens/HomeScreen';
 import GCEntryScreen from '../screens/GCEntryScreen';
 import MoreScreen from '../screens/MoreScreen';
+import TripSheetEntryScreen from '../screens/TripSheetEntryScreen';
 
 const Tab = createBottomTabNavigator();
 
-import TripSheetEntryScreen from '../screens/TripSheetEntryScreen';
-
 export default function TabNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -26,14 +28,25 @@ export default function TabNavigator() {
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#94a3b8',
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          paddingTop: 6,
+          paddingBottom: Math.max(insets.bottom, 6),
+          height: (Platform.OS === 'ios' ? 55 : 60) + insets.bottom,
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e2e8f0',
-        }
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          paddingBottom: 2,
+        },
       })}
     >
       <Tab.Screen name="Dashboard" component={HomeScreen} />

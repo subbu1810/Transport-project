@@ -28,7 +28,8 @@ import {
   Fuel,
   Headphones,
   Database,
-  QrCode
+  QrCode,
+  MessageSquare
 } from 'lucide-react'
 
 import { API_BASE_URL } from '../config/api'
@@ -239,6 +240,11 @@ function Sidebar({ isOpen, onToggle }) {
         { label: 'Backup Options', path: '/backup-options', icon: Database },
         { label: 'Mobile App QR Setup', path: '/mobile-app-qr', icon: QrCode },
       ]
+    },
+    {
+      label: 'WhatsApp & Messaging',
+      icon: MessageSquare,
+      path: '/communication'
     },
     {
       label: 'Technical Support',

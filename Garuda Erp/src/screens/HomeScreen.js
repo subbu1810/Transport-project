@@ -53,7 +53,8 @@ export default function HomeScreen({ navigation }) {
         { text: "Cancel", style: "cancel" },
         { text: "Logout", style: "destructive", onPress: async () => {
           try {
-            await AsyncStorage.clear();
+            await AsyncStorage.removeItem('user');
+            await AsyncStorage.removeItem('token');
             navigation.replace('Login');
           } catch (e) {
             console.error('Failed to logout', e);

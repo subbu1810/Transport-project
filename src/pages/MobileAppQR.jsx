@@ -6,6 +6,13 @@ import { API_BASE_URL } from "../config/api";
 // All known transports — matched against the logged-in user's API URL
 const ALL_TRANSPORTS = [
   {
+    code: "SIDDALINGESHWARA",
+    name: "Siddalingeshwara Transport",
+    apiUrl: "https://siddalingeshwara.ssquareg.tech/api/v1",
+    bg: "from-blue-600 to-cyan-600",
+    light: "bg-blue-50 border-blue-200",
+  },
+  {
     code: "MALLIKARJUNA",
     name: "Mallikarjuna Transport",
     apiUrl: "https://mallikarjuna-api.ssquareg.tech/api/v1",

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Garuda Erp",
     "slug": "garuda-erp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/garuda-logo.png",
     "scheme": "mobileapp",
@@ -17,7 +17,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.subbu1810.mobile_app",
-      "versionCode": 4,
+      "versionCode": 5,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.CAMERA",

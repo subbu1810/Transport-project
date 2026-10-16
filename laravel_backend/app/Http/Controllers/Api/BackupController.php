@@ -64,11 +64,78 @@ class BackupController extends Controller
                 'message' => 'Backup generated successfully.'
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Backup failed: ' . $e->getMessage()
-            ], 500);
+            \Log::warning('Spatie backup failed, attempting native PHP backup fallback: ' . $e->getMessage());
+            
+            try {
+                $zipFileName = $this->generatePhpNativeBackup();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Backup generated successfully via native exporter.',
+                    'file' => $zipFileName
+                ]);
+            } catch (\Exception $fallbackError) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Backup failed: ' . $e->getMessage() . ' | Fallback error: ' . $fallbackError->getMessage()
+                ], 500);
+            }
         }
+    }
+
+    private function generatePhpNativeBackup()
+    {
+        $appName = config('backup.backup.name') ?? config('app.name', 'Transport Management System');
+        $folder = storage_path('app/' . $appName);
+        if (!file_exists($folder)) {
+            mkdir($folder, 0777, true);
+        }
+
+        $timestamp = date('Y-m-d-H-i-s');
+        $sqlFile = $folder . '/database_' . $timestamp . '.sql';
+        $zipFile = $folder . '/' . $timestamp . '.zip';
+
+        // Export tables via PDO
+        $pdo = \DB::connection()->getPdo();
+        $tables = $pdo->query('SHOW TABLES')->fetchAll(\PDO::FETCH_COLUMN);
+
+        $handle = fopen($sqlFile, 'w');
+        fwrite($handle, "-- Transport Management System Native Database Backup\n-- Date: " . date('Y-m-d H:i:s') . "\n\nSET FOREIGN_KEY_CHECKS=0;\n\n");
+
+        foreach ($tables as $table) {
+            $createTable = $pdo->query("SHOW CREATE TABLE `{$table}`")->fetch(\PDO::FETCH_NUM);
+            fwrite($handle, "DROP TABLE IF EXISTS `{$table}`;\n" . $createTable[1] . ";\n\n");
+
+            $rows = $pdo->query("SELECT * FROM `{$table}`")->fetchAll(\PDO::FETCH_ASSOC);
+            if (!empty($rows)) {
+                $columns = array_keys($rows[0]);
+                $colNames = implode('`, `', $columns);
+
+                foreach ($rows as $row) {
+                    $values = array_map(function ($val) use ($pdo) {
+                        return is_null($val) ? 'NULL' : $pdo->quote($val);
+                    }, array_values($row));
+                    $valList = implode(', ', $values);
+                    fwrite($handle, "INSERT INTO `{$table}` (`{$colNames}`) VALUES ({$valList});\n");
+                }
+                fwrite($handle, "\n");
+            }
+        }
+
+        fwrite($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
+        fclose($handle);
+
+        // Create Zip
+        $zip = new \ZipArchive();
+        if ($zip->open($zipFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === TRUE) {
+            $zip->addFile($sqlFile, 'db-dumps/mysql-' . $timestamp . '.sql');
+            $zip->close();
+        }
+
+        if (file_exists($sqlFile)) {
+            unlink($sqlFile);
+        }
+
+        return basename($zipFile);
     }
 
     public function index()

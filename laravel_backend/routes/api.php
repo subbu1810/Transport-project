@@ -37,6 +37,8 @@ use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\EwayBillConfigController;
 use App\Http\Controllers\Api\EwayBillController;
+use App\Http\Controllers\Api\CommunicationController;
+use App\Http\Controllers\Api\WhatsAppIntegrationController;
 
 /* |-------------------------------------------------------------------------- | API Routes |-------------------------------------------------------------------------- | | Here is where you can register API routes for your application. These | routes are loaded by the RouteServiceProvider and all of them will | be assigned to the "api" middleware group. Make something great! | */
 
@@ -287,7 +289,42 @@ Route::prefix('v1')->group(function () {
         Route::post('orders/{id}', [MaintenanceController::class, 'createOrder']);
         Route::post('verify-payment', [MaintenanceController::class, 'verifyPayment']);
     });
+
+    // Communication & WhatsApp routes
+    Route::prefix('communication')->group(function () {
+        Route::get('templates', [CommunicationController::class, 'getTemplates']);
+        Route::post('templates', [CommunicationController::class, 'createTemplate']);
+        Route::put('templates/{id}', [CommunicationController::class, 'updateTemplate']);
+        Route::delete('templates/{id}', [CommunicationController::class, 'deleteTemplate']);
+        Route::get('logs', [CommunicationController::class, 'logs']);
+        Route::post('send', [CommunicationController::class, 'send']);
+        Route::post('bulk-send', [CommunicationController::class, 'bulkSend']);
+    });
+
+    // Meta WhatsApp Embedded Signup & Integration routes
+    Route::prefix('whatsapp')->group(function () {
+        Route::get('config', [WhatsAppIntegrationController::class, 'config']);
+        Route::get('status', [WhatsAppIntegrationController::class, 'status']);
+        Route::post('embedded-signup', [WhatsAppIntegrationController::class, 'embeddedSignup']);
+        Route::post('send-test-message', [WhatsAppIntegrationController::class, 'sendTestMessage']);
+        Route::post('disconnect', [WhatsAppIntegrationController::class, 'disconnect']);
+    });
+
+    // WhatsApp Webhook routes
+    Route::get('webhooks/whatsapp', [WhatsAppIntegrationController::class, 'webhookGet']);
+    Route::post('webhooks/whatsapp', [WhatsAppIntegrationController::class, 'webhookPost']);
 });
+
+// Direct alias routes for WhatsApp without /v1 prefix for external Meta callbacks & webhooks
+Route::get('whatsapp/config', [WhatsAppIntegrationController::class, 'config']);
+Route::get('whatsapp/status', [WhatsAppIntegrationController::class, 'status']);
+Route::post('whatsapp/embedded-signup', [WhatsAppIntegrationController::class, 'embeddedSignup']);
+Route::post('whatsapp/send-test-message', [WhatsAppIntegrationController::class, 'sendTestMessage']);
+Route::post('whatsapp/disconnect', [WhatsAppIntegrationController::class, 'disconnect']);
+Route::get('webhooks/whatsapp', [WhatsAppIntegrationController::class, 'webhookGet']);
+Route::post('webhooks/whatsapp', [WhatsAppIntegrationController::class, 'webhookPost']);
+Route::get('whatsapp/webhook', [WhatsAppIntegrationController::class, 'webhookGet']);
+Route::post('whatsapp/webhook', [WhatsAppIntegrationController::class, 'webhookPost']);
 
 // Health check endpoint
 Route::get('/health', function () {

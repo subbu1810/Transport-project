@@ -100,6 +100,7 @@ import BackupOptions from '../pages/BackupOptions'
 import MobileAppQR from '../pages/MobileAppQR'
 import UploadPod from '../pages/UploadPod'
 import PendingPodReport from '../pages/PendingPodReport'
+import Communication from '../pages/Communication'
 
 function TabbedInterface() {
   const { tabs, activeTab, closeTab, switchTab, showLimitModal, setShowLimitModal } = useTabs()
@@ -233,7 +234,9 @@ function TabbedInterface() {
     'technical-support': <TechnicalSupport />,
     'maintenance-billing': <MaintenanceBilling />,
     'backup-options': <BackupOptions />,
-    'mobile-app-qr': <MobileAppQR />
+    'mobile-app-qr': <MobileAppQR />,
+    'communication': <Communication />,
+    'whatsapp': <Communication />
   }
 
   return (

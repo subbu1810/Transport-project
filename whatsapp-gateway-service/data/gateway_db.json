@@ -1,0 +1,398 @@
+{
+  "tenants": [
+    {
+      "id": 1,
+      "name": "Garuda Transport Logistics",
+      "app_type": "transport",
+      "api_key": "gw_live_transport_1001",
+      "api_secret": "sec_live_transport_secret_abc123",
+      "per_msg_rate": 0.8,
+      "waba_id": null,
+      "phone_number_id": null,
+      "status": "active",
+      "created_at": "2026-10-01T06:45:49.785Z"
+    },
+    {
+      "id": 2,
+      "name": "Spice Garden Restaurant & Cafe",
+      "app_type": "restaurant",
+      "api_key": "gw_live_restaurant_2002",
+      "api_secret": "sec_live_restaurant_secret_def456",
+      "per_msg_rate": 0.75,
+      "waba_id": null,
+      "phone_number_id": null,
+      "status": "active",
+      "created_at": "2026-10-01T06:45:49.799Z"
+    },
+    {
+      "id": 3,
+      "name": "FitZone Elite Gym & Fitness",
+      "app_type": "gym",
+      "api_key": "gw_live_gym_3003",
+      "api_secret": "sec_live_gym_secret_ghi789",
+      "per_msg_rate": 0.8,
+      "waba_id": null,
+      "phone_number_id": null,
+      "status": "active",
+      "created_at": "2026-10-01T06:45:49.810Z"
+    },
+    {
+      "id": 4,
+      "name": "Life Transport Logistics",
+      "app_type": "transport",
+      "api_key": "gw_live_trans_e794c78c47654f7e",
+      "api_secret": "sec_live_e9bc61d0157b4c2db29efd50535711f6",
+      "per_msg_rate": 0.8,
+      "display_phone_number": "+91 98450 12345",
+      "phone_number_id": "6005920138",
+      "meta_access_token": null,
+      "waba_id": null,
+      "status": "active",
+      "created_at": "2026-10-01T07:34:44.270Z"
+    },
+    {
+      "id": 5,
+      "name": "FitLife Power Gym",
+      "app_type": "gym",
+      "api_key": "gw_live_gym_4ab69807313d441b",
+      "api_secret": "sec_live_1002a929ce21415db2701ed3fa4b8fcd",
+      "per_msg_rate": 0.85,
+      "display_phone_number": "+91 99887 76655",
+      "phone_number_id": "9918273645",
+      "meta_access_token": null,
+      "waba_id": null,
+      "status": "active",
+      "created_at": "2026-10-01T07:39:02.031Z"
+    }
+  ],
+  "wallets": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "balance": 498.4,
+      "currency": "INR",
+      "low_balance_threshold": 50,
+      "updated_at": "2026-10-01T07:44:48.606Z"
+    },
+    {
+      "id": 2,
+      "tenant_id": 2,
+      "balance": 299.25,
+      "currency": "INR",
+      "low_balance_threshold": 50,
+      "updated_at": "2026-10-01T06:47:22.547Z"
+    },
+    {
+      "id": 3,
+      "tenant_id": 3,
+      "balance": 249.2,
+      "currency": "INR",
+      "low_balance_threshold": 50,
+      "updated_at": "2026-10-01T06:47:22.602Z"
+    },
+    {
+      "id": 4,
+      "tenant_id": 4,
+      "balance": 499.2,
+      "currency": "INR",
+      "low_balance_threshold": 50,
+      "updated_at": "2026-10-01T07:39:02.073Z"
+    },
+    {
+      "id": 5,
+      "tenant_id": 5,
+      "balance": 349.15,
+      "currency": "INR",
+      "low_balance_threshold": 50,
+      "updated_at": "2026-10-01T07:39:02.102Z"
+    }
+  ],
+  "wallet_transactions": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "type": 500,
+      "amount": 500,
+      "balance_after": null,
+      "reference_id": null,
+      "description": "",
+      "created_at": "2026-10-01T06:45:49.793Z"
+    },
+    {
+      "id": 2,
+      "tenant_id": 2,
+      "type": 300,
+      "amount": 300,
+      "balance_after": null,
+      "reference_id": null,
+      "description": "",
+      "created_at": "2026-10-01T06:45:49.805Z"
+    },
+    {
+      "id": 3,
+      "tenant_id": 3,
+      "type": 250,
+      "amount": 250,
+      "balance_after": null,
+      "reference_id": null,
+      "description": "",
+      "created_at": "2026-10-01T06:45:49.818Z"
+    },
+    {
+      "id": 4,
+      "tenant_id": 1,
+      "type": 0.8,
+      "amount": 499.2,
+      "balance_after": 1,
+      "reference_id": "Sent \"transport_lr_dispatch\" to +919876543210",
+      "description": "",
+      "created_at": "2026-10-01T06:46:18.534Z"
+    },
+    {
+      "id": 5,
+      "tenant_id": 1,
+      "type": 0.8,
+      "amount": 500,
+      "balance_after": 1,
+      "reference_id": "Auto-refund: Dispatch failed - Unsupported post request. Object with ID '6005920138' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api (Code: 100)",
+      "description": "",
+      "created_at": "2026-10-01T06:46:19.447Z"
+    },
+    {
+      "id": 6,
+      "tenant_id": 1,
+      "type": 0.8,
+      "amount": 499.2,
+      "balance_after": 2,
+      "reference_id": "Sent \"transport_lr_dispatch\" to +919876543210",
+      "description": "",
+      "created_at": "2026-10-01T06:47:22.470Z"
+    },
+    {
+      "id": 7,
+      "tenant_id": 2,
+      "type": 0.75,
+      "amount": 299.25,
+      "balance_after": 3,
+      "reference_id": "Sent \"restaurant_bill_pdf\" to +919876543211",
+      "description": "",
+      "created_at": "2026-10-01T06:47:22.555Z"
+    },
+    {
+      "id": 8,
+      "tenant_id": 3,
+      "type": 0.8,
+      "amount": 249.2,
+      "balance_after": 4,
+      "reference_id": "Sent \"gym_membership_expiry_reminder\" to +919876543212",
+      "description": "",
+      "created_at": "2026-10-01T06:47:22.608Z"
+    },
+    {
+      "id": 9,
+      "tenant_id": 4,
+      "type": 500,
+      "amount": 500,
+      "balance_after": null,
+      "reference_id": null,
+      "description": "",
+      "created_at": "2026-10-01T07:34:44.281Z"
+    },
+    {
+      "id": 10,
+      "tenant_id": 5,
+      "type": 350,
+      "amount": 350,
+      "balance_after": null,
+      "reference_id": null,
+      "description": "",
+      "created_at": "2026-10-01T07:39:02.039Z"
+    },
+    {
+      "id": 11,
+      "tenant_id": 4,
+      "type": 0.8,
+      "amount": 499.2,
+      "balance_after": 5,
+      "reference_id": "Sent \"transport_lr_dispatch\" to +919876543210",
+      "description": "",
+      "created_at": "2026-10-01T07:39:02.077Z"
+    },
+    {
+      "id": 12,
+      "tenant_id": 5,
+      "type": 0.85,
+      "amount": 349.15,
+      "balance_after": 6,
+      "reference_id": "Sent \"gym_membership_expiry_reminder\" to +919876543211",
+      "description": "",
+      "created_at": "2026-10-01T07:39:02.106Z"
+    },
+    {
+      "id": 13,
+      "tenant_id": 1,
+      "type": 0.8,
+      "amount": 498.4,
+      "balance_after": 7,
+      "reference_id": "Sent \"transport_lr_dispatch\" to +917022477479",
+      "description": "",
+      "created_at": "2026-10-01T07:44:48.612Z"
+    }
+  ],
+  "message_templates": [
+    {
+      "id": 1,
+      "template_name": "transport_lr_dispatch",
+      "category": "UTILITY",
+      "language": "en_US",
+      "header_type": "TEXT",
+      "body_preview": "Hello {{1}}, your consignment with LR No: {{2}} has been dispatched from {{3}} to {{4}}. Track here: {{5}}",
+      "meta_status": "APPROVED",
+      "created_at": "2026-10-01T06:45:49.823Z"
+    },
+    {
+      "id": 2,
+      "template_name": "restaurant_bill_pdf",
+      "category": "UTILITY",
+      "language": "en_US",
+      "header_type": "DOCUMENT",
+      "body_preview": "Thank you for dining at {{1}}! Your total bill is {{2}} (Bill No: {{3}}). Click below to view/download your e-bill PDF: {{4}}",
+      "meta_status": "APPROVED",
+      "created_at": "2026-10-01T06:45:49.828Z"
+    },
+    {
+      "id": 3,
+      "template_name": "gym_membership_expiry_reminder",
+      "category": "UTILITY",
+      "language": "en_US",
+      "header_type": "TEXT",
+      "body_preview": "Hi {{1}}, your gym membership at {{2}} expires on {{3}}. Renew today to enjoy uninterrupted workouts! Pay online: {{4}}",
+      "meta_status": "APPROVED",
+      "created_at": "2026-10-01T06:45:49.833Z"
+    }
+  ],
+  "message_logs": [
+    {
+      "id": 1,
+      "tenant_id": 1,
+      "recipient_phone": "+919876543210",
+      "template_name": "transport_lr_dispatch",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543210\",\"template\":\"transport_lr_dispatch\",\"parameters\":{\"customer_name\":\"Rahul Sharma\",\"lr_no\":\"LR-1002\",\"origin\":\"Mumbai\",\"destination\":\"Delhi\",\"link\":\"https://track.com/1002\"}}",
+      "cost_charged": 0.8,
+      "status": "failed",
+      "meta_msg_id": null,
+      "error_details": "Unsupported post request. Object with ID '6005920138' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api (Code: 100)",
+      "sent_at": null,
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T06:46:18.523Z"
+    },
+    {
+      "id": 2,
+      "tenant_id": 1,
+      "recipient_phone": "+919876543210",
+      "template_name": "transport_lr_dispatch",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543210\",\"template\":\"transport_lr_dispatch\",\"parameters\":{\"customer_name\":\"Rahul Sharma\",\"lr_no\":\"LR-1002\",\"origin\":\"Mumbai\",\"destination\":\"Delhi\",\"link\":\"https://track.com/1002\"}}",
+      "cost_charged": 0.8,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_e6914816-902",
+      "error_details": null,
+      "sent_at": "2026-10-01T06:47:22.479Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T06:47:22.448Z"
+    },
+    {
+      "id": 3,
+      "tenant_id": 2,
+      "recipient_phone": "+919876543211",
+      "template_name": "restaurant_bill_pdf",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543211\",\"template\":\"restaurant_bill_pdf\",\"header_media_url\":\"https://spicegarden.com/bills/204.pdf\",\"header_media_type\":\"DOCUMENT\",\"parameters\":{\"restaurant\":\"Spice Garden\",\"amount\":\"₹1,250\",\"bill_no\":\"INV-402\",\"pdf\":\"https://spicegarden.com/bills/204.pdf\"}}",
+      "cost_charged": 0.75,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_aa87c37e-f99",
+      "error_details": null,
+      "sent_at": "2026-10-01T06:47:22.564Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T06:47:22.537Z"
+    },
+    {
+      "id": 4,
+      "tenant_id": 3,
+      "recipient_phone": "+919876543212",
+      "template_name": "gym_membership_expiry_reminder",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543212\",\"template\":\"gym_membership_expiry_reminder\",\"parameters\":{\"name\":\"Karan\",\"gym\":\"FitZone\",\"date\":\"2026-10-15\",\"url\":\"https://fitzone.com/renew\"}}",
+      "cost_charged": 0.8,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_1f7f1711-e4f",
+      "error_details": null,
+      "sent_at": "2026-10-01T06:47:22.616Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T06:47:22.592Z"
+    },
+    {
+      "id": 5,
+      "tenant_id": 4,
+      "recipient_phone": "+919876543210",
+      "sender_phone_id": "+91 98450 12345",
+      "template_name": "transport_lr_dispatch",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543210\",\"template\":\"transport_lr_dispatch\",\"parameters\":{\"customer\":\"Rajesh\",\"lr\":\"GC-9901\",\"from\":\"Bangalore\",\"to\":\"Goa\",\"link\":\"https://lifetransport.com/9901\"}}",
+      "cost_charged": 0.8,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_72f2b09d-f60",
+      "error_details": null,
+      "sent_at": "2026-10-01T07:39:02.082Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T07:39:02.068Z"
+    },
+    {
+      "id": 6,
+      "tenant_id": 5,
+      "recipient_phone": "+919876543211",
+      "sender_phone_id": "+91 99887 76655",
+      "template_name": "gym_membership_expiry_reminder",
+      "message_type": "template",
+      "payload": "{\"to\":\"+919876543211\",\"template\":\"gym_membership_expiry_reminder\",\"parameters\":{\"member\":\"Vikram\",\"gym\":\"FitLife Gym\",\"date\":\"20-Oct-2026\",\"link\":\"https://fitlife.in/pay\"}}",
+      "cost_charged": 0.85,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_2a8377a9-541",
+      "error_details": null,
+      "sent_at": "2026-10-01T07:39:02.111Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T07:39:02.097Z"
+    },
+    {
+      "id": 7,
+      "tenant_id": 1,
+      "recipient_phone": "+917022477479",
+      "sender_phone_id": "Shared Gateway Number",
+      "template_name": "transport_lr_dispatch",
+      "message_type": "template",
+      "payload": "{\"to\":\"+917022477479\",\"template\":\"transport_lr_dispatch\",\"parameters\":{\"customer_name\":\"Rahul Sharma\",\"lr_no\":\"GC-1029\",\"from_city\":\"Bangalore\",\"to_city\":\"Hyderabad\",\"tracking_link\":\"https://transport.garuda.in/track/1029\"}}",
+      "cost_charged": 0.8,
+      "status": "sent",
+      "meta_msg_id": "wamid.SIMULATED_8dcef01f-61b",
+      "error_details": null,
+      "sent_at": "2026-10-01T07:44:48.618Z",
+      "delivered_at": null,
+      "read_at": null,
+      "created_at": "2026-10-01T07:44:48.594Z"
+    }
+  ],
+  "counters": {
+    "tenants": 5,
+    "wallets": 5,
+    "wallet_transactions": 13,
+    "message_templates": 3,
+    "message_logs": 7
+  }
+}

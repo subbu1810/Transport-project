@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Gateway & Multi-App Billing Hub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 28, 45, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #25D366; /* WhatsApp Green */
+      --accent-hover: #1EBE5D;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at 10% 20%, #111827 0%, #090d16 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 18px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: rgba(9, 13, 22, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(37, 211, 102, 0.3);
+    }
+    .brand h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+    .brand span { font-size: 0.75rem; color: var(--accent); background: rgba(37,211,102,0.12); padding: 2px 8px; border-radius: 20px; border: 1px solid rgba(37,211,102,0.3); }
+
+    .main-container {
+      max-width: 1320px;
+      width: 100%;
+      margin: 28px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 370px 1fr;
+      gap: 24px;
+      flex: 1;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Tenant Selector & Accounts */
+    .tenant-item {
+      padding: 14px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tenant-item:hover, .tenant-item.active {
+      border-color: var(--accent);
+      background: rgba(37, 211, 102, 0.06);
+    }
+    .tenant-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .tenant-badge {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+    .tenant-balance {
+      font-size: 0.85rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .tenant-sender {
+      font-size: 0.75rem;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .tenant-key {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      margin-top: 6px;
+      word-break: break-all;
+    }
+
+    /* Tabs & Forms */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      font-family: inherit;
+    }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.14); }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 560px;
+      padding: 28px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      animation: modalFadeIn 0.25s ease-out;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 { font-size: 1.15rem; font-weight: 700; }
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .close-btn:hover { color: var(--text); }
+
+    /* Section divider inside modal */
+    .modal-section {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .modal-section-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Logs Table */
+    .table-container {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-sent { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+    .badge-delivered { background: rgba(37, 211, 102, 0.2); color: #86efac; }
+    .badge-failed { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+
+    .response-box {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      background: #040711;
+      border: 1px solid var(--border);
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #a5f3fc;
+      max-height: 180px;
+      overflow-y: auto;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">💬</div>
+      <div>
+        <h1>WhatsApp Multi-App Gateway & Billing Hub</h1>
+        <small style="color: var(--text-muted); font-size: 0.75rem;">Dedicated Sender Numbers & Wallet Engine for Life Transport, Restaurants & Gyms</small>
+      </div>
+    </div>
+    <div>
+      <button class="btn" style="width: auto; padding: 8px 16px; font-size: 0.85rem;" onclick="openNewCustomerModal()">+ Add Customer & WhatsApp Number</button>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <!-- Left Sidebar: Tenants & Accounts -->
+    <div>
+      <div class="card">
+        <div class="card-title">
+          <span>Connected Apps / Clients</span>
+          <button class="btn btn-secondary" style="width: auto; padding: 4px 10px; font-size: 0.75rem;" onclick="openNewCustomerModal()">+ Add</button>
+        </div>
+        <div id="tenantsList">
+          <p style="color: var(--text-muted); font-size: 0.85rem;">Loading customers...</p>
+        </div>
+      </div>
+
+      <!-- Quick Wallet Top-up Card -->
+      <div class="card" style="margin-top: 20px;">
+        <div class="card-title">
+          <span>💰 Quick Recharge Customer Wallet</span>
+        </div>
+        <div class="form-group">
+          <label>Select Customer / App</label>
+          <select id="rechargeTenantSelect"></select>
+        </div>
+        <div class="form-group">
+          <label>Amount (INR)</label>
+          <input type="number" id="rechargeAmount" value="500" min="10">
+        </div>
+        <button class="btn" onclick="rechargeWallet()">Top-up Credits</button>
+      </div>
+    </div>
+
+    <!-- Right Area: Send Test Message & Live Message Logs -->
+    <div>
+      <div class="card">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchTab('send')">✉️ Send Message (Simulator)</button>
+          <button class="tab-btn" onclick="switchTab('logs')">📜 Live Message Logs</button>
+          <button class="tab-btn" onclick="switchTab('api')">🔌 Code Snippets / SDK</button>
+        </div>
+
+        <!-- TAB 1: SEND MESSAGE -->
+        <div id="tabSend">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label>Sending From (Customer Business)</label>
+              <select id="sendTenantSelect" onchange="updateTemplatePresets()"></select>
+            </div>
+            <div class="form-group">
+              <label>Recipient Phone Number (with Country Code)</label>
+              <input type="text" id="recipientPhone" placeholder="+91 98765 43210" value="+919876543210">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Template</label>
+            <select id="templateSelect" onchange="onTemplateChanged()">
+              <option value="transport_lr_dispatch">Transport LR Dispatch (Transport ERP)</option>
+              <option value="restaurant_bill_pdf">Restaurant e-Bill PDF (Restaurant App)</option>
+              <option value="gym_membership_expiry_reminder">Gym Membership Renewal (Gym App)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Dynamic Parameters (JSON)</label>
+            <textarea id="templateParams" rows="4" style="font-family: monospace;"></textarea>
+          </div>
+
+          <div class="form-group" id="pdfLinkGroup" style="display: none;">
+            <label>Document / PDF Receipt URL</label>
+            <input type="text" id="pdfUrl" value="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf">
+          </div>
+
+          <button class="btn" onclick="sendMessage()">⚡ Dispatch WhatsApp Message</button>
+          <div class="response-box" id="responseBox"></div>
+        </div>
+
+        <!-- TAB 2: MESSAGE LOGS -->
+        <div id="tabLogs" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; color: var(--text-muted);">Real-time dispatch status, cost deducted, and Meta message IDs</span>
+            <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 0.8rem;" onclick="loadLogs()">🔄 Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Recipient</th>
+                  <th>Template</th>
+                  <th>Cost (INR)</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No messages sent yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 3: CODE SNIPPETS -->
+        <div id="tabApi" style="display: none;">
+          <h4 style="margin-bottom: 10px; font-size: 0.95rem;">Integrating into your Restaurant, Gym, or Transport Apps</h4>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">Simply make a <code>POST</code> request with your customer API key:</p>
+
+          <pre style="background: #040711; padding: 16px; border-radius: 8px; font-size: 0.8rem; overflow-x: auto; color: #38bdf8; border: 1px solid var(--border);">
+// Example: In Life Transport / Restaurant / Gym App:
+const response = await fetch('http://localhost:4000/api/v1/messages/send-template', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer gw_live_transport_1001' // Life Transport API key
+  },
+  body: JSON.stringify({
+    to: "+919876543210",
+    template: "transport_lr_dispatch",
+    parameters: {
+      customer_name: "Rahul Sharma",
+      lr_no: "GC-1029",
+      origin: "Bangalore",
+      destination: "Hyderabad",
+      tracking_url: "https://lifetransport.com/track/1029"
+    }
+  })
+});
+const result = await response.json();
+console.log(result);
+          </pre>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD NEW CUSTOMER / BUSINESS WITH DEDICATED SENDER NUMBER -->
+  <div class="modal-overlay" id="newCustomerModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🏢 Onboard Customer (with Dedicated WhatsApp Number)</h3>
+        <button class="close-btn" onclick="closeNewCustomerModal()">&times;</button>
+      </div>
+      <form id="newCustomerForm" onsubmit="submitNewCustomer(event)">
+        <!-- Basic Info -->
+        <div class="modal-section">
+          <div class="modal-section-title">1. Business Profile</div>
+          <div class="form-group">
+            <label>Business / Customer Name</label>
+            <input type="text" id="modalCustomerName" placeholder="e.g. Life Transport Logistics, Royal Spice Cafe" required>
+          </div>
+
+          <div class="form-group">
+            <label>App Category</label>
+            <select id="modalAppType">
+              <option value="transport">Transport / Logistics ERP</option>
+              <option value="restaurant">Restaurant / Cafe Billing</option>
+              <option value="gym">Gym / Fitness Center</option>
+              <option value="ecommerce">E-Commerce / Retail</option>
+              <option value="custom">Other / Custom Application</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dedicated Meta WhatsApp Details -->
+        <div class="modal-section">
+          <div class="modal-section-title">2. Customer's WhatsApp Number (Meta WABA Setup)</div>
+          
+          <div class="form-group">
+            <label>Customer's Display WhatsApp Number</label>
+            <input type="text" id="modalDisplayPhone" placeholder="e.g. +91 98450 12345 (Their Own Number)">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label>Meta Phone Number ID</label>
+              <input type="text" id="modalPhoneId" placeholder="e.g. 6005920138">
+            </div>
+            <div class="form-group">
+              <label>Meta WABA ID (Optional)</label>
+              <input type="text" id="modalWabaId" placeholder="e.g. 10928374829">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Customer's Meta System User Token (Optional)</label>
+            <input type="password" id="modalAccessToken" placeholder="EAANCK8FWD... (leave blank to use master token)">
+          </div>
+        </div>
+
+        <!-- Billing & Wallet -->
+        <div class="modal-section">
+          <div class="modal-section-title">3. Pay-Per-Message Billing & Wallet</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label>Price Per Message (INR)</label>
+              <input type="number" id="modalMsgRate" value="0.80" step="0.01" min="0.10" required>
+            </div>
+            <div class="form-group">
+              <label>Initial Wallet Balance (INR)</label>
+              <input type="number" id="modalInitialBalance" value="250.00" min="0" required>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="closeNewCustomerModal()">Cancel</button>
+          <button type="submit" class="btn">Create Customer & Generate API Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let tenants = [];
+    let selectedTenantApiKey = '';
+
+    const templatesPreset = {
+      transport_lr_dispatch: {
+        customer_name: "Rahul Sharma",
+        lr_no: "GC-1029",
+        from_city: "Bangalore",
+        to_city: "Hyderabad",
+        tracking_link: "https://transport.garuda.in/track/1029"
+      },
+      restaurant_bill_pdf: {
+        restaurant_name: "Spice Garden",
+        total_bill: "₹1,450.00",
+        bill_no: "B-204",
+        pdf_download_link: "https://spicegarden.com/invoices/204.pdf"
+      },
+      gym_membership_expiry_reminder: {
+        member_name: "Amit Patel",
+        gym_name: "FitZone Elite",
+        expiry_date: "15-Oct-2026",
+        renewal_link: "https://fitzone.in/pay/renew"
+      }
+    };
+
+    async function fetchTenants() {
+      try {
+        const res = await fetch('/api/v1/tenants');
+        const data = await res.json();
+        tenants = data.tenants || [];
+        renderTenants();
+      } catch (err) {
+        console.error('Failed to load tenants:', err);
+      }
+    }
+
+    function renderTenants() {
+      const listEl = document.getElementById('tenantsList');
+      const selectSendEl = document.getElementById('sendTenantSelect');
+      const selectRechargeEl = document.getElementById('rechargeTenantSelect');
+
+      listEl.innerHTML = '';
+      selectSendEl.innerHTML = '';
+      selectRechargeEl.innerHTML = '';
+
+      tenants.forEach((t, index) => {
+        // Sidebar item
+        const item = document.createElement('div');
+        const isSelected = selectedTenantApiKey === t.api_key || (!selectedTenantApiKey && index === 0);
+        item.className = `tenant-item ${isSelected ? 'active' : ''}`;
+        
+        const senderNumber = t.display_phone_number ? `📱 Sends from: ${t.display_phone_number}` : (t.phone_number_id ? `📱 Phone ID: ${t.phone_number_id}` : '📱 Sends from: Shared Gateway Number');
+
+        item.innerHTML = `
+          <div class="tenant-name">
+            <span>${t.name}</span>
+            <span class="tenant-badge">${t.app_type}</span>
+          </div>
+          <div class="tenant-sender">${senderNumber}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+            <span class="tenant-balance">₹${parseFloat(t.balance || 0).toFixed(2)}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">${t.total_messages_sent || 0} msgs sent</span>
+          </div>
+          <div class="tenant-key">Key: ${t.api_key}</div>
+        `;
+        item.onclick = () => {
+          document.querySelectorAll('.tenant-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+          selectSendEl.value = t.api_key;
+          selectedTenantApiKey = t.api_key;
+          loadLogs();
+        };
+        listEl.appendChild(item);
+
+        // Select options
+        const opt = document.createElement('option');
+        opt.value = t.api_key;
+        opt.textContent = `${t.name} (₹${parseFloat(t.balance || 0).toFixed(2)})`;
+        selectSendEl.appendChild(opt);
+
+        const opt2 = document.createElement('option');
+        opt2.value = t.api_key;
+        opt2.textContent = t.name;
+        selectRechargeEl.appendChild(opt2);
+      });
+
+      if (tenants.length > 0 && !selectedTenantApiKey) {
+        selectedTenantApiKey = tenants[0].api_key;
+        onTemplateChanged();
+        loadLogs();
+      }
+    }
+
+    function openNewCustomerModal() {
+      document.getElementById('newCustomerModal').style.display = 'flex';
+      document.getElementById('modalCustomerName').focus();
+    }
+
+    function closeNewCustomerModal() {
+      document.getElementById('newCustomerModal').style.display = 'none';
+      document.getElementById('newCustomerForm').reset();
+    }
+
+    async function submitNewCustomer(e) {
+      e.preventDefault();
+      const name = document.getElementById('modalCustomerName').value.trim();
+      const app_type = document.getElementById('modalAppType').value;
+      const display_phone_number = document.getElementById('modalDisplayPhone').value.trim() || null;
+      const phone_number_id = document.getElementById('modalPhoneId').value.trim() || null;
+      const waba_id = document.getElementById('modalWabaId').value.trim() || null;
+      const meta_access_token = document.getElementById('modalAccessToken').value.trim() || null;
+      const per_msg_rate = parseFloat(document.getElementById('modalMsgRate').value);
+      const initial_balance = parseFloat(document.getElementById('modalInitialBalance').value);
+
+      try {
+        const res = await fetch('/api/v1/tenants/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            app_type,
+            display_phone_number,
+            phone_number_id,
+            waba_id,
+            meta_access_token,
+            per_msg_rate,
+            initial_balance
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeNewCustomerModal();
+          alert(`🎉 Customer "${data.tenant.name}" created successfully!\n\n🔑 Generated API Key:\n${data.tenant.api_key}`);
+          selectedTenantApiKey = data.tenant.api_key;
+          await fetchTenants();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Network Error: ' + err.message);
+      }
+    }
+
+    function onTemplateChanged() {
+      const tmpl = document.getElementById('templateSelect').value;
+      const params = templatesPreset[tmpl] || {};
+      document.getElementById('templateParams').value = JSON.stringify(params, null, 2);
+      
+      const pdfGroup = document.getElementById('pdfLinkGroup');
+      if (tmpl === 'restaurant_bill_pdf') {
+        pdfGroup.style.display = 'block';
+      } else {
+        pdfGroup.style.display = 'none';
+      }
+    }
+
+    function updateTemplatePresets() {
+      selectedTenantApiKey = document.getElementById('sendTenantSelect').value;
+      const tenant = tenants.find(t => t.api_key === selectedTenantApiKey);
+      if (tenant) {
+        if (tenant.app_type === 'restaurant') document.getElementById('templateSelect').value = 'restaurant_bill_pdf';
+        else if (tenant.app_type === 'gym') document.getElementById('templateSelect').value = 'gym_membership_expiry_reminder';
+        else document.getElementById('templateSelect').value = 'transport_lr_dispatch';
+        onTemplateChanged();
+      }
+    }
+
+    async function sendMessage() {
+      const apiKey = document.getElementById('sendTenantSelect').value;
+      const recipient = document.getElementById('recipientPhone').value;
+      const template = document.getElementById('templateSelect').value;
+      const paramsText = document.getElementById('templateParams').value;
+      const pdfUrl = document.getElementById('pdfUrl').value;
+      const responseBox = document.getElementById('responseBox');
+
+      let parsedParams = {};
+      try {
+        parsedParams = JSON.parse(paramsText);
+      } catch(e) {
+        alert('Invalid JSON parameters');
+        return;
+      }
+
+      responseBox.style.display = 'block';
+      responseBox.textContent = 'Sending message to WhatsApp Gateway...';
+
+      try {
+        const payload = {
+          to: recipient,
+          template: template,
+          parameters: parsedParams
+        };
+
+        if (template === 'restaurant_bill_pdf') {
+          payload.header_media_url = pdfUrl;
+          payload.header_media_type = 'DOCUMENT';
+        }
+
+        const res = await fetch('/api/v1/messages/send-template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        responseBox.textContent = JSON.stringify(data, null, 2);
+        
+        // Refresh balance & logs
+        await fetchTenants();
+        loadLogs();
+      } catch (err) {
+        responseBox.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    async function loadLogs() {
+      if (!selectedTenantApiKey) return;
+      try {
+        const res = await fetch('/api/v1/messages/logs', {
+          headers: { 'Authorization': `Bearer ${selectedTenantApiKey}` }
+        });
+        const data = await res.json();
+        const tbody = document.getElementById('logsTableBody');
+        tbody.innerHTML = '';
+
+        if (!data.logs || data.logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No messages sent yet for this customer.</td></tr>';
+          return;
+        }
+
+        data.logs.forEach(log => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>#${log.id}</td>
+            <td style="font-family: monospace;">${log.recipient_phone}</td>
+            <td><code>${log.template_name}</code></td>
+            <td style="color: var(--accent); font-weight: 600;">₹${parseFloat(log.cost_charged).toFixed(2)}</td>
+            <td><span class="badge badge-${log.status}">${log.status}</span></td>
+            <td style="color: var(--text-muted); font-size: 0.75rem;">${new Date(log.created_at).toLocaleTimeString()}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch(err) {
+        console.error('Failed to load logs:', err);
+      }
+    }
+
+    async function rechargeWallet() {
+      const apiKey = document.getElementById('rechargeTenantSelect').value;
+      const amount = parseFloat(document.getElementById('rechargeAmount').value);
+      if (!amount || amount <= 0) return alert('Enter valid amount');
+
+      try {
+        const res = await fetch('/api/v1/wallet/recharge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ amount })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`Successfully recharged ₹${amount.toFixed(2)}!`);
+          fetchTenants();
+        } else {
+          alert('Failed: ' + data.error);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tabSend').style.display = tab === 'send' ? 'block' : 'none';
+      document.getElementById('tabLogs').style.display = tab === 'logs' ? 'block' : 'none';
+      document.getElementById('tabApi').style.display = tab === 'api' ? 'block' : 'none';
+      event.target.classList.add('active');
+    }
+
+    // Initial load
+    fetchTenants();
+  </script>
+</body>
+</html>

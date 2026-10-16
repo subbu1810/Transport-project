@@ -31,6 +31,10 @@ import MaintenanceAlert from './components/MaintenanceAlert'
 import BackupOptions from './pages/BackupOptions'
 import MobileAppQR from './pages/MobileAppQR'
 import ForceBackupOverlay from './components/ForceBackupOverlay'
+import Communication from './pages/Communication'
+import WhatsAppIntegration from './pages/WhatsAppIntegration'
+import { API_BASE_URL } from './config/api'
+
 function App() {
   const [showSplash, setShowSplash] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -214,6 +218,9 @@ function App() {
                     <Route path="/maintenance-billing" element={<MaintenanceBilling />} />
                     <Route path="/backup-options" element={<BackupOptions />} />
                     <Route path="/mobile-app-qr" element={<MobileAppQR />} />
+                    <Route path="/communication" element={<Communication />} />
+                    <Route path="/whatsapp-integration" element={<WhatsAppIntegration />} />
+                    <Route path="/settings/whatsapp" element={<WhatsAppIntegration />} />
                     {/* Simplified route handling for tab system */}
                     <Route path="*" element={<TabbedInterface />} />
                   </Routes>

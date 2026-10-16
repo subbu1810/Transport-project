@@ -2,14 +2,14 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCachedApiUrl, getTransportConfig } from './transportConfig';
 
-// Default fallback URL if nothing configured yet
-export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.lifetransport.ssquareg.com/api/v1';
+// Fallback URL if defined in env
+export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
 // Alias used by screens that import { API_URL }
 export const API_URL = DEFAULT_API_URL;
 
 const api = axios.create({
-  baseURL: DEFAULT_API_URL,
+  baseURL: DEFAULT_API_URL || undefined,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',

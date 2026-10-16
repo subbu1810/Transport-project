@@ -72,12 +72,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  container: { 
-    flex: 1, 
-    width: '100%',
-    maxWidth: 800,
-    alignSelf: 'center'
-  },
   header: {
     padding: 20,
     backgroundColor: '#ffffff',
@@ -89,9 +83,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0f172a',
   },
-  container: {
+  container: { 
     paddingTop: 10,
     paddingBottom: 40,
+    width: '100%',
+    maxWidth: 800,
+    alignSelf: 'center',
   },
   listItem: {
     flexDirection: 'row',
