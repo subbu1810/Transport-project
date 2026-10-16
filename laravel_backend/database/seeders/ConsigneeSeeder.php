@@ -5,143 +5,129 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\Consignee;
 use App\Models\Destination;
-use App\Models\Branch;
 
 class ConsigneeSeeder extends Seeder
 {
     public function run(): void
     {
-        $defaultBranch = Branch::first();
-        $branchId = $defaultBranch ? $defaultBranch->id : 1;
+        // Get the first destination (assuming it exists)
+        $destination = Destination::first();
+        
+        if (!$destination) {
+            $this->command->warn('No destinations found. Please run DestinationSeeder first.');
+            return;
+        }
 
-        $consigneesData = [
+        $consignees = [
             [
-                'name' => 'Bharat Hardware & Tools Corporation',
+                'name' => 'ABC Manufacturing Ltd',
                 'code' => 'CNS001',
-                'gst_number' => '29AABCB1111E1Z5',
-                'address' => 'Shop No. 12, APMC Yard, Yeshwanthpur',
-                'destination_name' => 'Yeshwanthpur',
-                'land_number' => '08023371122',
-                'mobile_number' => '9845112233',
+                'gst_number' => '18ABCMN1234H1Z0',
+                'address' => '123 Industrial Area, Phase 1',
+                'land_number' => '08012345678',
+                'mobile_number' => '9876543210',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Silicon Valley Electronics Distributorship',
+                'name' => 'XYZ Trading Company',
                 'code' => 'CNS002',
-                'gst_number' => '29AAACS2222F1Z4',
-                'address' => 'Tower B, Phase 1, Electronic City',
-                'destination_name' => 'Electronic City',
-                'land_number' => '08028523344',
-                'mobile_number' => '9886223344',
+                'gst_number' => '18XYZTR5678H2Z0',
+                'address' => '456 Commercial Street, Building A',
+                'land_number' => '08087654321',
+                'mobile_number' => '9876543211',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Chamundi Commercial Enterprises',
+                'name' => 'Global Exporters Pvt Ltd',
                 'code' => 'CNS003',
-                'gst_number' => '29AAACC3333G1Z3',
-                'address' => 'No. 45, Santhepet Main Market, Mysuru',
-                'destination_name' => 'Mysuru City Central',
-                'land_number' => '08212423344',
-                'mobile_number' => '9448334455',
+                'gst_number' => '18GLBEX9999H3Z0',
+                'address' => '789 Export Zone, Sector 5',
+                'land_number' => '08011223344',
+                'mobile_number' => '9876543212',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Malabar Marine & Logistics Hub',
+                'name' => 'Swift Logistics Solutions',
                 'code' => 'CNS004',
-                'gst_number' => '29AAACM4444H1Z2',
-                'address' => 'Wharf Road, New Mangalore Port Trust Area',
-                'destination_name' => 'Mangalore Port / Wharf',
-                'land_number' => '08242445566',
-                'mobile_number' => '9844445566',
+                'gst_number' => '18SWFTL1111H4Z0',
+                'address' => '321 Logistics Park, Block C',
+                'land_number' => '08055667788',
+                'mobile_number' => '9876543213',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'North Karnataka Agro Traders',
+                'name' => 'Premium Industries',
                 'code' => 'CNS005',
-                'gst_number' => '29AAACN5555J1Z1',
-                'address' => 'Grain Market Road, Hubli Central',
-                'destination_name' => 'Hubli Central Market',
-                'land_number' => '08362335566',
-                'mobile_number' => '9741556677',
+                'gst_number' => '18PRMIN2222H5Z0',
+                'address' => '654 Industrial Estate, Unit 7',
+                'land_number' => '08099887766',
+                'mobile_number' => '9876543214',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Kaveri Retailers & Wholesalers',
+                'name' => 'Express Delivery Services',
                 'code' => 'CNS006',
-                'gst_number' => '33AAACK6666K1Z9',
-                'address' => '78, Cross Cut Road, Gandhipuram, Coimbatore',
-                'destination_name' => 'Coimbatore City Market',
-                'land_number' => '04222446677',
-                'mobile_number' => '9842667788',
+                'gst_number' => '18EXPDL3333H6Z0',
+                'address' => '987 Service Center, Main Road',
+                'land_number' => '08044556677',
+                'mobile_number' => '9876543215',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Metro Fasteners & Industrial Supplies',
+                'name' => 'National Transport Corp',
                 'code' => 'CNS007',
-                'gst_number' => '27AAACM7777L1Z8',
-                'address' => 'Gala 14, MIDC Industrial Area, Bhosari, Pune',
-                'destination_name' => 'Bhosari MIDC',
-                'land_number' => '02027127788',
-                'mobile_number' => '9822778899',
+                'gst_number' => '18NTTRP4444H7Z0',
+                'address' => '147 Transport Hub, Gate 2',
+                'land_number' => '08033445566',
+                'mobile_number' => '9876543216',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Precision Spares & Engineering Store',
+                'name' => 'Metro Cargo Solutions',
                 'code' => 'CNS008',
-                'gst_number' => '29AAACP8888M1Z7',
-                'address' => 'Plot 88, Jigani 1st Phase Industrial Area',
-                'destination_name' => 'Jigani Industrial Area',
-                'land_number' => '08027828899',
-                'mobile_number' => '9900889900',
+                'gst_number' => '18MTCRG5555H8Z0',
+                'address' => '258 Metro Complex, Floor 3',
+                'land_number' => '08022334455',
+                'mobile_number' => '9876543217',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Deccan Electricals & Lighting Hub',
+                'name' => 'Rapid Delivery Systems',
                 'code' => 'CNS009',
-                'gst_number' => '36AAACD1111N1Z6',
-                'address' => 'Ranigunj Market Road, Secunderabad',
-                'destination_name' => 'Sanath Nagar Industrial Estate',
-                'land_number' => '04027711223',
-                'mobile_number' => '9849112233',
+                'gst_number' => '18RPDDL6666H9Z0',
+                'address' => '369 Rapid Lane, Street 4',
+                'land_number' => '08011223344',
+                'mobile_number' => '9876543218',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
             [
-                'name' => 'Royal Textiles & Furnishings',
+                'name' => 'Elite Logistics Group',
                 'code' => 'CNS010',
-                'gst_number' => '33AAACR2222P1Z5',
-                'address' => 'Kumaran Road, Tiruppur',
-                'destination_name' => 'Tiruppur Cotton Hub',
-                'land_number' => '04212233445',
-                'mobile_number' => '9843223344',
+                'gst_number' => '18ELTLG7777H0Z0',
+                'address' => '741 Elite Tower, Suite 10',
+                'land_number' => '08000112233',
+                'mobile_number' => '9876543219',
+                'destination_id' => $destination->id,
                 'is_active' => true,
             ],
         ];
 
-        $fallbackDestination = Destination::first();
-
-        foreach ($consigneesData as $data) {
-            $destination = Destination::where('city_name', $data['destination_name'])->first() ?? $fallbackDestination;
-
-            if (!$destination) {
-                $this->command->error("No destination found for consignee {$data['name']}. Please run DestinationSeeder first.");
-                return;
-            }
-
+        foreach ($consignees as $consignee) {
             Consignee::updateOrCreate(
-                ['code' => $data['code']],
-                [
-                    'name' => $data['name'],
-                    'gst_number' => $data['gst_number'],
-                    'address' => $data['address'],
-                    'land_number' => $data['land_number'],
-                    'mobile_number' => $data['mobile_number'],
-                    'destination_id' => $destination->id,
-                    'branch_id' => $branchId,
-                    'is_active' => $data['is_active'],
-                ]
+                ['code' => $consignee['code']],
+                $consignee
             );
         }
 
-        $this->command->info('Consignee seeder completed successfully! (' . count($consigneesData) . ' consignees seeded)');
+        $this->command->info('Consignee seeder completed successfully!');
     }
 }
