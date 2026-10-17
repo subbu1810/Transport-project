@@ -345,10 +345,14 @@ class WaybillController extends Controller
             // Load relationships for receipt
             $waybill->load(['originBranch', 'destination', 'consignor', 'consignee', 'articles']);
 
+            // Auto-dispatch WhatsApp notification for GC Booking
+            $waStatus = $this->dispatchBookingWhatsAppNotification($waybill);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Waybill created successfully',
-                'data' => $waybill
+                'data' => $waybill,
+                'whatsapp' => $waStatus
             ], 201);
 
         } catch (\Exception $e) {
@@ -1873,5 +1877,165 @@ class WaybillController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Dispatch WhatsApp notification for GC Booking
+     */
+    public function dispatchBookingWhatsAppNotification(Waybill $waybill, ?string $customPhone = null, string $recipientType = 'consignor'): array
+    {
+        try {
+            $token = env('WHATSAPP_TOKEN', '');
+            $phoneId = env('WHATSAPP_PHONE_NUMBER_ID', '');
+
+            if (empty($token) || empty($phoneId)) {
+                $integration = \App\Models\WhatsAppIntegration::where('status', 'connected')->first();
+                if ($integration) {
+                    $token = $integration->getDecryptedAccessToken();
+                    $phoneId = $integration->phone_number_id;
+                }
+            }
+
+            if (empty($token) || empty($phoneId)) {
+                return ['success' => false, 'message' => 'WhatsApp API credentials not configured in .env'];
+            }
+
+            // Determine recipient phone
+            $rawPhone = $customPhone;
+            $recipientName = 'Customer';
+
+            if (empty($rawPhone)) {
+                if ($recipientType === 'consignee') {
+                    $rawPhone = $waybill->consignee->mobile_number ?? $waybill->consignee->mobile ?? $waybill->consignee->phone ?? null;
+                    $recipientName = $waybill->consignee->name ?? 'Consignee';
+                } else {
+                    $rawPhone = $waybill->consignor->mobile_no ?? $waybill->consignor->mobile ?? $waybill->consignor->phone ?? null;
+                    $recipientName = $waybill->consignor->name ?? 'Consignor';
+                }
+            }
+
+            if (empty($rawPhone)) {
+                return ['success' => false, 'message' => "No mobile number found for {$recipientType}"];
+            }
+
+            // Clean phone number (strip spaces, symbols, ensure 91 for Indian numbers)
+            $cleanDigits = preg_replace('/[^0-9]/', '', (string)$rawPhone);
+            if (strlen($cleanDigits) === 10) {
+                $cleanDigits = '91' . $cleanDigits;
+            } elseif (strlen($cleanDigits) === 12 && str_starts_with($cleanDigits, '91')) {
+                // Already has 91 prefix
+            } elseif (strlen($cleanDigits) < 10) {
+                return ['success' => false, 'message' => "Invalid phone number: {$rawPhone}"];
+            }
+
+            $companyName = env('APP_NAME', 'Mallikarjuna Roadlines');
+            $gcNo = $waybill->gc_number;
+            $from = $waybill->originBranch->branch_name ?? 'Origin';
+            $to = $waybill->destination->city_name ?? ($waybill->destination->branch_name ?? 'Destination');
+            $articles = $waybill->total_articles ?? count($waybill->articles ?? []);
+            $articleDesc = !empty($waybill->article_desc) ? " ({$waybill->article_desc})" : "";
+            $amount = number_format((float)($waybill->grand_total ?? 0), 2);
+            $accType = strtoupper($waybill->account_type ?? 'TO PAY');
+
+            $text = "🚚 *{$companyName}*\n\n"
+                  . "✅ *Consignment Booked Successfully!*\n"
+                  . "• *GC No:* {$gcNo}\n"
+                  . "• *Date:* " . ($waybill->bill_date ?? date('d-m-Y')) . "\n"
+                  . "• *Consignor:* " . ($waybill->consignor->name ?? 'N/A') . "\n"
+                  . "• *Consignee:* " . ($waybill->consignee->name ?? 'N/A') . "\n"
+                  . "• *Route:* {$from} ➔ {$to}\n"
+                  . "• *Articles:* {$articles}{$articleDesc}\n"
+                  . "• *Total Freight:* ₹{$amount} ({$accType})\n"
+                  . "• *Status:* Booked\n\n"
+                  . "Thank you for shipping with us!";
+
+            // Send via Meta WhatsApp Cloud API using curl
+            $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to'                => $cleanDigits,
+                'type'              => 'text',
+                'text'              => ['body' => $text],
+            ];
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                "Authorization: Bearer {$token}",
+            ]);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            $decoded = json_decode($response, true);
+            $sent = ($httpCode >= 200 && $httpCode < 300 && isset($decoded['messages'][0]['id']));
+            $msgId = $decoded['messages'][0]['id'] ?? null;
+            $err = $decoded['error']['message'] ?? $curlError ?? null;
+
+            // Log to message_logs if table exists
+            try {
+                \App\Models\MessageLog::create([
+                    'channel'        => 'whatsapp',
+                    'recipient_name' => $recipientName,
+                    'phone'          => $cleanDigits,
+                    'message_type'   => 'gc_booking',
+                    'template_id'    => null,
+                    'message_body'   => $text,
+                    'status'         => $sent ? 'sent' : 'failed',
+                    'external_id'    => $msgId,
+                    'error_message'  => $err,
+                    'branch_id'      => $waybill->origin_branch_id,
+                    'user_id'        => $waybill->created_by,
+                    'sent_at'        => now(),
+                ]);
+            } catch (\Exception $logEx) {
+                \Log::warning("Failed to create message log: " . $logEx->getMessage());
+            }
+
+            return [
+                'success'    => $sent,
+                'phone'      => $cleanDigits,
+                'recipient'  => $recipientName,
+                'message_id' => $msgId,
+                'error'      => $err,
+            ];
+        } catch (\Exception $e) {
+            \Log::error("WhatsApp booking notification error: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * POST /api/v1/waybills/{id}/send-whatsapp
+     * Manual or re-dispatch WhatsApp notification for a Waybill
+     */
+    public function sendWhatsApp(Request $request, $id): JsonResponse
+    {
+        try {
+            $waybill = Waybill::with(['originBranch', 'destination', 'consignor', 'consignee', 'articles'])->findOrFail($id);
+            $customPhone = $request->input('phone');
+            $recipientType = $request->input('recipient_type', 'consignor');
+
+            $res = $this->dispatchBookingWhatsAppNotification($waybill, $customPhone, $recipientType);
+
+            return response()->json([
+                'success' => $res['success'],
+                'message' => $res['success'] 
+                    ? "WhatsApp message sent successfully to {$res['recipient']} ({$res['phone']})!" 
+                    : ("Failed to send: " . ($res['error'] ?? 'Unknown error')),
+                'data' => $res
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
 }
+
 

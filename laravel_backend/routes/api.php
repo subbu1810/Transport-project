@@ -168,6 +168,7 @@ Route::prefix('v1')->group(function () {
     Route::get('waybills/init-data', [WaybillController::class , 'initData']);
     Route::apiResource('waybills', WaybillController::class);
     Route::post('waybills/{id}/upload-pod', [WaybillController::class, 'uploadPod']);
+    Route::post('waybills/{id}/send-whatsapp', [WaybillController::class, 'sendWhatsApp']);
 
     // Admin login route (must come before apiResource)
     Route::post('admins/login', [AdminController::class , 'login']);

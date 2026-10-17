@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { X, Printer, Loader2, CheckCircle, AlertCircle, HelpCircle, FileText } from 'lucide-react'
+import { X, Printer, Loader2, CheckCircle, AlertCircle, HelpCircle, FileText, MessageSquare, Send, Share2 } from 'lucide-react'
 import GCEntryReceipt from '../components/GCEntryReceipt'
 import { API_BASE_URL, STORAGE_URL } from '../config/api';
 import { applyBranchOverrides } from '../utils/branchOverrides';
+import { communicationService } from '../services/communicationService';
 
 
 
@@ -48,6 +49,9 @@ function GCEntry() {
   const [notification, setNotification] = useState({ show: false, type: '', message: '' })
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedGC, setSavedGC] = useState(null)
+  const [whatsAppStatus, setWhatsAppStatus] = useState(null)
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
+  const [selectedRecipient, setSelectedRecipient] = useState('consignor')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [logoUrl, setLogoUrl] = useState(null)
   const [companyDetails, setCompanyDetails] = useState(null)
@@ -543,6 +547,9 @@ function GCEntry() {
       if (data.success) {
         showNotify('success', 'GC Saved Successfully!')
         setSavedGC(data.data)
+        if (data.whatsapp) {
+          setWhatsAppStatus(data.whatsapp)
+        }
         setShowReceipt(true)
         // Note: handleReset is called when the user closes the Receipt Modal
       } else {
@@ -555,6 +562,35 @@ function GCEntry() {
       setSaving(false)
     }
   }
+
+  const handleSendWhatsApp = async (recipientType = 'consignor') => {
+    if (!savedGC?.id) return;
+    try {
+      setSendingWhatsApp(true);
+      const res = await communicationService.sendWaybillWhatsApp(savedGC.id, {
+        recipient_type: recipientType
+      });
+      if (res.success) {
+        showNotify('success', res.message || 'WhatsApp message sent successfully!');
+        setWhatsAppStatus({ success: true, phone: res.data?.phone, recipient: res.data?.recipient });
+      } else {
+        showNotify('error', res.message || 'Failed to send WhatsApp message via Meta API');
+      }
+    } catch (err) {
+      console.error('WhatsApp send error:', err);
+      showNotify('error', 'Error sending WhatsApp message');
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  };
+
+  const handleOpenWhatsAppWeb = (recipientType = 'consignor') => {
+    if (!savedGC) return;
+    const phone = recipientType === 'consignee'
+      ? (savedGC.consignee?.mobile_number || savedGC.consignee?.mobile || savedGC.consignee?.phone)
+      : (savedGC.consignor?.mobile_no || savedGC.consignor?.mobile || savedGC.consignor?.phone);
+    communicationService.shareWaybillSummary(savedGC, companyDetails?.company_name || 'Mallikarjuna Roadlines', phone);
+  };
 
   const handleReset = () => {
     setFormData({
@@ -987,36 +1023,101 @@ function GCEntry() {
         )}
       </div>
 
-      {/* ── Receipt Options Modal (Step 1: Choose print type) ── */}
+      {/* ── Receipt Options Modal (Step 1: Choose print & WhatsApp actions) ── */}
       {showReceipt && savedGC && !showPrintPreview && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-green-100">
-            <div className="p-6 bg-gradient-to-b from-green-50 to-white text-center">
-              <div className="flex justify-center mb-3">
-                <div className="p-3 bg-green-100 rounded-full text-green-600">
-                  <CheckCircle size={32} />
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-green-100">
+            <div className="p-6 bg-gradient-to-b from-green-50 to-white text-center pb-3">
+              <div className="flex justify-center mb-2">
+                <div className="p-2.5 bg-green-100 rounded-full text-green-600 shadow-sm">
+                  <CheckCircle size={30} />
                 </div>
               </div>
-              <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight">GC Saved!</h2>
-              <p className="text-gray-500 text-sm font-medium mt-1">GC No: <span className="font-black text-green-700">{savedGC?.gc_number}</span></p>
-              <p className="text-gray-400 text-xs mt-2">Choose how to print this receipt</p>
+              <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight">GC Saved Successfully!</h2>
+              <p className="text-gray-500 text-sm font-medium mt-0.5">GC No: <span className="font-black text-green-700 font-mono">#{savedGC?.gc_number}</span></p>
+
+              {/* Automatic WhatsApp Status Badge */}
+              {whatsAppStatus?.success && (
+                <div className="mt-2.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl inline-flex items-center gap-2 text-xs font-bold text-emerald-800 animate-in fade-in">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  WhatsApp sent to {whatsAppStatus.recipient} ({whatsAppStatus.phone})
+                </div>
+              )}
             </div>
-            <div className="p-5 space-y-3">
+
+            <div className="p-5 space-y-4 pt-1">
+              {/* WhatsApp Action Card */}
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase text-emerald-950 tracking-wider flex items-center gap-1.5">
+                    <MessageSquare size={16} className="text-emerald-600" />
+                    WhatsApp Notification
+                  </span>
+                  <div className="flex bg-white p-0.5 rounded-lg border border-emerald-200 text-[10px] font-bold">
+                    <button
+                      onClick={() => setSelectedRecipient('consignor')}
+                      className={`px-2 py-0.5 rounded-md transition-all ${selectedRecipient === 'consignor' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-800 hover:bg-emerald-50'}`}
+                    >
+                      Consignor
+                    </button>
+                    <button
+                      onClick={() => setSelectedRecipient('consignee')}
+                      className={`px-2 py-0.5 rounded-md transition-all ${selectedRecipient === 'consignee' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-800 hover:bg-emerald-50'}`}
+                    >
+                      Consignee
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-gray-600 font-medium flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-emerald-100">
+                  <span className="truncate">
+                    To: <strong>{selectedRecipient === 'consignor' ? (savedGC.consignor?.name || 'Consignor') : (savedGC.consignee?.name || 'Consignee')}</strong>
+                  </span>
+                  <span className="font-mono text-emerald-700 font-black ml-2 text-xs">
+                    {selectedRecipient === 'consignor'
+                      ? (savedGC.consignor?.mobile_no || savedGC.consignor?.mobile || savedGC.consignor?.phone || 'No phone')
+                      : (savedGC.consignee?.mobile_number || savedGC.consignee?.mobile || savedGC.consignee?.phone || 'No phone')}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-0.5">
+                  <button
+                    disabled={sendingWhatsApp}
+                    onClick={() => handleSendWhatsApp(selectedRecipient)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-black text-xs transition shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    {sendingWhatsApp ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    {whatsAppStatus?.success ? 'Resend API' : 'Send via API'}
+                  </button>
+                  <button
+                    onClick={() => handleOpenWhatsAppWeb(selectedRecipient)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white text-emerald-700 border border-emerald-300 rounded-xl hover:bg-emerald-50 font-black text-xs transition shadow-sm active:scale-95"
+                    title="Open chat in WhatsApp Web or App"
+                  >
+                    <Share2 size={14} /> Open Chat
+                  </button>
+                </div>
+              </div>
+
+              {/* Print Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handlePrint('full')}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 font-black text-xs transition shadow-md active:scale-95"
+                >
+                  <Printer size={16} /> Full Print
+                </button>
+                <button
+                  onClick={() => handlePrint('content')}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 font-black text-xs transition shadow-md active:scale-95"
+                >
+                  <FileText size={16} /> Content Print
+                </button>
+              </div>
+
               <button
-                onClick={() => handlePrint('full')}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 font-black transition shadow-lg active:scale-95"
-              >
-                <Printer size={20} /> Full Print
-              </button>
-              <button
-                onClick={() => handlePrint('content')}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-2xl hover:bg-green-700 font-black transition shadow-lg active:scale-95"
-              >
-                <FileText size={20} /> Content Only Print
-              </button>
-              <button
-                onClick={() => { setShowReceipt(false); handleReset(); }}
-                className="w-full px-6 py-2.5 bg-gray-100 text-gray-500 rounded-2xl hover:bg-gray-200 font-bold transition text-sm"
+                onClick={() => { setShowReceipt(false); setWhatsAppStatus(null); handleReset(); }}
+                className="w-full py-2.5 bg-gray-100 text-gray-500 rounded-2xl hover:bg-gray-200 font-bold transition text-xs active:scale-95"
               >
                 Skip & Close
               </button>

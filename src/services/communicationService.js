@@ -73,6 +73,16 @@ export const communicationService = {
     return res.json();
   },
 
+  // Send Waybill / GC WhatsApp via Meta Cloud API
+  sendWaybillWhatsApp: async (waybillId, { phone, recipient_type = 'consignor' } = {}) => {
+    const res = await fetch(`${API_BASE_URL}/waybills/${waybillId}/send-whatsapp`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ phone, recipient_type }),
+    });
+    return res.json();
+  },
+
   // Instant WhatsApp Web / App share helper
   openWhatsAppChat: (phone, message) => {
     const cleaned = (phone || '').toString().replace(/[^0-9]/g, '');
@@ -81,27 +91,39 @@ export const communicationService = {
     window.open(url, '_blank');
   },
 
-  // Share Waybill Summary directly
-  shareWaybillSummary: (waybill) => {
+  // Share Waybill Summary directly via WhatsApp Web
+  shareWaybillSummary: (waybill, companyName = 'Mallikarjuna Roadlines', targetPhone = null) => {
     if (!waybill) return;
-    const gcNo = waybill.waybill_number || waybill.gc_no || waybill.id || '-';
+    const gcNo = waybill.gc_number || waybill.waybill_number || waybill.gc_no || waybill.id || '-';
     const consignor = waybill.consignor?.name || waybill.consignor_name || 'Customer';
     const consignee = waybill.consignee?.name || waybill.consignee_name || '-';
-    const from = waybill.from_branch?.branch_name || waybill.source_branch || '-';
-    const to = waybill.to_branch?.branch_name || waybill.destination_branch || '-';
-    const amount = waybill.total_amount || waybill.freight_amount || 0;
-    const phone = waybill.consignor?.mobile || waybill.consignor?.phone || waybill.consignee?.mobile || '';
+    const from = waybill.origin_branch?.branch_name || waybill.from_branch?.branch_name || waybill.source_branch || '-';
+    const to = waybill.destination?.city_name || waybill.destination?.branch_name || waybill.to_branch?.branch_name || '-';
+    const amount = waybill.grand_total || waybill.total_amount || waybill.freight_amount || 0;
+    const accType = (waybill.account_type || 'TO PAY').toUpperCase();
+    const articles = waybill.total_articles || waybill.articles?.length || 1;
+    const articleDesc = waybill.article_desc ? ` (${waybill.article_desc})` : '';
 
-    const text = `🚚 *Sri Gadilingeswara Roadlines*\n\n` +
-      `*Waybill / GC Details:*\n` +
+    const phone = targetPhone || 
+      waybill.consignor?.mobile_no || 
+      waybill.consignor?.mobile || 
+      waybill.consignor?.phone || 
+      waybill.consignee?.mobile_number || 
+      waybill.consignee?.mobile || '';
+
+    const text = `🚚 *${companyName}*\n\n` +
+      `✅ *Consignment Booked Successfully!*\n` +
       `• *GC No:* ${gcNo}\n` +
+      `• *Date:* ${waybill.bill_date || new Date().toISOString().split('T')[0]}\n` +
       `• *Consignor:* ${consignor}\n` +
       `• *Consignee:* ${consignee}\n` +
       `• *Route:* ${from} ➔ ${to}\n` +
-      `• *Total Amount:* Rs. ${amount}\n` +
-      `• *Status:* ${waybill.status || 'Booked'}\n\n` +
+      `• *Articles:* ${articles}${articleDesc}\n` +
+      `• *Total Freight:* ₹${Number(amount).toFixed(2)} (${accType})\n` +
+      `• *Status:* Booked\n\n` +
       `Thank you for shipping with us!`;
 
     communicationService.openWhatsAppChat(phone, text);
   }
 };
+
