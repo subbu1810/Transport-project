@@ -1952,30 +1952,24 @@ class WaybillController extends Controller
             $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
             
             $templateName = env('WHATSAPP_BOOKING_TEMPLATE', 'gc_booking_confirmation');
-            $templateLang = env('WHATSAPP_BOOKING_TEMPLATE_LANG', 'en');
+            $customLang   = env('WHATSAPP_BOOKING_TEMPLATE_LANG', null);
+            $languages    = $customLang ? [$customLang] : ['en_US', 'en'];
 
-            // 1. Primary: Send via official approved Meta Template (works 24/7 for all customers)
-            $templatePayload = [
-                'messaging_product' => 'whatsapp',
-                'to'                => $cleanDigits,
-                'type'              => 'template',
-                'template'          => [
-                    'name'     => $templateName,
-                    'language' => ['code' => $templateLang],
-                    'components' => [
-                        [
-                            'type' => 'body',
-                            'parameters' => [
-                                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
-                                ['type' => 'text', 'text' => (string)$gcNo],
-                                ['type' => 'text', 'text' => (string)$from],
-                                ['type' => 'text', 'text' => (string)$to],
-                                ['type' => 'text', 'text' => (string)$amount],
-                                ['type' => 'text', 'text' => (string)$accType],
-                            ]
-                        ]
-                    ]
-                ]
+            $params6 = [
+                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                ['type' => 'text', 'text' => (string)$gcNo],
+                ['type' => 'text', 'text' => (string)$from],
+                ['type' => 'text', 'text' => (string)$to],
+                ['type' => 'text', 'text' => (string)$amount],
+                ['type' => 'text', 'text' => (string)$accType],
+            ];
+
+            $params5 = [
+                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                ['type' => 'text', 'text' => (string)$gcNo],
+                ['type' => 'text', 'text' => (string)$from],
+                ['type' => 'text', 'text' => (string)$to],
+                ['type' => 'text', 'text' => (string)$amount],
             ];
 
             $sendCurl = function($p) use ($url, $token) {
@@ -2003,13 +1997,48 @@ class WaybillController extends Controller
                 ];
             };
 
-            $res = $sendCurl($templatePayload);
-            $httpCode = $res['httpCode'];
-            $decoded  = $res['decoded'];
-            $curlError = $res['curlError'];
+            $templateSuccess = false;
+            $lastTemplateError = null;
+            $httpCode = 0;
+            $decoded = null;
+            $curlError = null;
 
-            // 2. Fallback: If template is still pending or not approved, try regular text message
-            if (!($httpCode >= 200 && $httpCode < 300 && isset($decoded['messages'][0]['id']))) {
+            // Try template combinations: language (en_US, en) x parameter counts (6, 5)
+            foreach ($languages as $lang) {
+                foreach ([$params6, $params5] as $paramSet) {
+                    $templatePayload = [
+                        'messaging_product' => 'whatsapp',
+                        'to'                => $cleanDigits,
+                        'type'              => 'template',
+                        'template'          => [
+                            'name'     => $templateName,
+                            'language' => ['code' => $lang],
+                            'components' => [
+                                [
+                                    'type'       => 'body',
+                                    'parameters' => $paramSet
+                                ]
+                            ]
+                        ]
+                    ];
+
+                    $res = $sendCurl($templatePayload);
+                    if ($res['httpCode'] >= 200 && $res['httpCode'] < 300 && isset($res['decoded']['messages'][0]['id'])) {
+                        $httpCode = $res['httpCode'];
+                        $decoded = $res['decoded'];
+                        $curlError = $res['curlError'];
+                        $templateSuccess = true;
+                        break 2;
+                    } else {
+                        $lastTemplateError = $res['decoded']['error']['message'] ?? ($res['curlError'] ?? 'Unknown template error');
+                    }
+                }
+            }
+
+            // Fallback to text message if template failed completely
+            if (!$templateSuccess) {
+                \Log::warning("WhatsApp template '{$templateName}' failed: {$lastTemplateError}. Attempting text fallback.");
+
                 $textPayload = [
                     'messaging_product' => 'whatsapp',
                     'to'                => $cleanDigits,
@@ -2017,16 +2046,17 @@ class WaybillController extends Controller
                     'text'              => ['body' => $text],
                 ];
                 $fallbackRes = $sendCurl($textPayload);
-                if ($fallbackRes['httpCode'] >= 200 && $fallbackRes['httpCode'] < 300 && isset($fallbackRes['decoded']['messages'][0]['id'])) {
-                    $httpCode  = $fallbackRes['httpCode'];
-                    $decoded   = $fallbackRes['decoded'];
-                    $curlError = $fallbackRes['curlError'];
-                }
+                $httpCode  = $fallbackRes['httpCode'];
+                $decoded   = $fallbackRes['decoded'];
+                $curlError = $fallbackRes['curlError'];
             }
 
             $sent = ($httpCode >= 200 && $httpCode < 300 && isset($decoded['messages'][0]['id']));
             $msgId = $decoded['messages'][0]['id'] ?? null;
-            $err = $decoded['error']['message'] ?? $curlError ?? null;
+            // If template failed, surface the template error so user knows why Meta didn't deliver
+            $err = (!$templateSuccess && $lastTemplateError) 
+                ? "Template failed ({$lastTemplateError}). Fallback text queued." 
+                : ($decoded['error']['message'] ?? $curlError ?? null);
 
             // Log to message_logs if table exists
             if (\Illuminate\Support\Facades\Schema::hasTable('message_logs')) {
