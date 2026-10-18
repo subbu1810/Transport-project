@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\MessageTemplate;
 use App\Models\MessageLog;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class CommunicationController extends Controller
 {
@@ -15,26 +16,41 @@ class CommunicationController extends Controller
      */
     public function getTemplates(Request $request)
     {
-        $query = MessageTemplate::query();
+        try {
+            if (!Schema::hasTable('message_templates')) {
+                return response()->json([
+                    'success' => true,
+                    'data'    => []
+                ]);
+            }
 
-        if ($request->has('channel') && $request->channel) {
-            $query->where('channel', $request->channel);
+            $query = MessageTemplate::query();
+
+            if ($request->has('channel') && $request->channel) {
+                $query->where('channel', $request->channel);
+            }
+
+            if ($request->has('type') && $request->type) {
+                $query->where('type', $request->type);
+            }
+
+            if ($request->has('status') && $request->status) {
+                $query->where('status', $request->status);
+            }
+
+            $templates = $query->latest()->get();
+
+            return response()->json([
+                'success' => true,
+                'data'    => $templates
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Error fetching message templates: ' . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'data'    => []
+            ]);
         }
-
-        if ($request->has('type') && $request->type) {
-            $query->where('type', $request->type);
-        }
-
-        if ($request->has('status') && $request->status) {
-            $query->where('status', $request->status);
-        }
-
-        $templates = $query->latest()->get();
-
-        return response()->json([
-            'success' => true,
-            'data'    => $templates
-        ]);
     }
 
     /**
@@ -112,28 +128,52 @@ class CommunicationController extends Controller
      */
     public function logs(Request $request)
     {
-        $query = MessageLog::with('template');
+        try {
+            if (!Schema::hasTable('message_logs')) {
+                return response()->json([
+                    'current_page' => 1,
+                    'data'         => [],
+                    'total'        => 0,
+                    'per_page'     => 20,
+                    'last_page'    => 1,
+                ]);
+            }
 
-        if ($request->filled('phone')) {
-            $query->where('phone', 'like', '%' . $request->phone . '%');
+            $query = MessageLog::query();
+            if (Schema::hasTable('message_templates')) {
+                $query->with('template');
+            }
+
+            if ($request->filled('phone')) {
+                $query->where('phone', 'like', '%' . $request->phone . '%');
+            }
+
+            if ($request->filled('channel')) {
+                $query->where('channel', $request->channel);
+            }
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('date')) {
+                $query->whereDate('created_at', $request->date);
+            }
+
+            $perPage = $request->input('per_page', 20);
+            $logs = $query->latest()->paginate($perPage);
+
+            return response()->json($logs);
+        } catch (\Throwable $e) {
+            Log::warning('Error fetching message logs: ' . $e->getMessage());
+            return response()->json([
+                'current_page' => 1,
+                'data'         => [],
+                'total'        => 0,
+                'per_page'     => 20,
+                'last_page'    => 1,
+            ]);
         }
-
-        if ($request->filled('channel')) {
-            $query->where('channel', $request->channel);
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('date')) {
-            $query->whereDate('created_at', $request->date);
-        }
-
-        $perPage = $request->input('per_page', 20);
-        $logs = $query->latest()->paginate($perPage);
-
-        return response()->json($logs);
     }
 
     /**
@@ -196,21 +236,28 @@ class CommunicationController extends Controller
         $encodedText = urlencode($messageBody);
         $directWaUrl = "https://wa.me/{$phone}?text={$encodedText}";
 
-        // Save to MessageLog
-        $log = MessageLog::create([
-            'channel'        => $channel,
-            'recipient_name' => $recipientName,
-            'phone'          => $phone,
-            'message_type'   => $messageType,
-            'template_id'    => $templateId,
-            'message_body'   => $messageBody,
-            'status'         => $status,
-            'external_id'    => $externalId,
-            'error_message'  => $errorMessage,
-            'branch_id'      => $request->input('branch_id'),
-            'user_id'        => $request->input('user_id'),
-            'sent_at'        => now(),
-        ]);
+        // Save to MessageLog if table exists
+        $log = null;
+        if (Schema::hasTable('message_logs')) {
+            try {
+                $log = MessageLog::create([
+                    'channel'        => $channel,
+                    'recipient_name' => $recipientName,
+                    'phone'          => $phone,
+                    'message_type'   => $messageType,
+                    'template_id'    => $templateId,
+                    'message_body'   => $messageBody,
+                    'status'         => $status,
+                    'external_id'    => $externalId,
+                    'error_message'  => $errorMessage,
+                    'branch_id'      => $request->input('branch_id'),
+                    'user_id'        => $request->input('user_id'),
+                    'sent_at'        => now(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to save MessageLog: ' . $e->getMessage());
+            }
+        }
 
         return response()->json([
             'success'       => ($status === 'sent'),
@@ -247,18 +294,27 @@ class CommunicationController extends Controller
                 $validated['message_body']
             );
 
-            $log = MessageLog::create([
-                'channel'        => $validated['channel'] ?? 'whatsapp',
-                'recipient_name' => $name,
-                'phone'          => $phone,
-                'message_type'   => 'bulk',
-                'template_id'    => $validated['template_id'] ?? null,
-                'message_body'   => $body,
-                'status'         => 'sent',
-                'sent_at'        => now(),
-            ]);
+            $log = null;
+            if (Schema::hasTable('message_logs')) {
+                try {
+                    $log = MessageLog::create([
+                        'channel'        => $validated['channel'] ?? 'whatsapp',
+                        'recipient_name' => $name,
+                        'phone'          => $phone,
+                        'message_type'   => 'bulk',
+                        'template_id'    => $validated['template_id'] ?? null,
+                        'message_body'   => $body,
+                        'status'         => 'sent',
+                        'sent_at'        => now(),
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed to save bulk MessageLog: ' . $e->getMessage());
+                }
+            }
 
-            $results[] = $log;
+            if ($log) {
+                $results[] = $log;
+            }
         }
 
         return response()->json([

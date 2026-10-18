@@ -124,11 +124,30 @@ export default function Communication() {
     fetchLogs();
   }, []);
 
+  // Re-fetch when switching to relevant tab
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchLogs();
+    } else if (activeTab === 'templates') {
+      fetchTemplates();
+    }
+  }, [activeTab]);
+
+  // Debounced filter effect for logs
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      const timer = setTimeout(() => {
+        fetchLogs();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [searchPhone, statusFilter]);
+
   const fetchTemplates = async () => {
     try {
       setLoadingTemplates(true);
       const res = await communicationService.getTemplates();
-      if (res.success && res.data && res.data.length > 0) {
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
         setTemplates(res.data);
       } else {
         // Show default presets in UI if database is fresh
@@ -145,15 +164,21 @@ export default function Communication() {
   const fetchLogs = async () => {
     try {
       setLoadingLogs(true);
-      const res = await communicationService.getLogs({
-        phone: searchPhone,
-        status: statusFilter,
-      });
-      if (res && res.data) {
-        setLogs(res.data);
+      const params = {};
+      if (searchPhone && searchPhone.trim()) params.phone = searchPhone.trim();
+      if (statusFilter && statusFilter.trim()) params.status = statusFilter.trim();
+
+      const res = await communicationService.getLogs(params);
+      if (res) {
+        // Handle Laravel paginator { data: [...] } or direct array [...]
+        const list = Array.isArray(res) ? res : (Array.isArray(res.data) ? res.data : []);
+        setLogs(list);
+      } else {
+        setLogs([]);
       }
     } catch (err) {
       console.error('Failed to load logs:', err);
+      setLogs([]);
     } finally {
       setLoadingLogs(false);
     }
