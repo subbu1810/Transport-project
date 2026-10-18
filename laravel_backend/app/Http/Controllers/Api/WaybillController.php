@@ -1950,53 +1950,104 @@ class WaybillController extends Controller
 
             // Send via Meta WhatsApp Cloud API using curl
             $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
-            $payload = [
+            
+            $templateName = env('WHATSAPP_BOOKING_TEMPLATE', 'gc_booking_confirmation');
+            $templateLang = env('WHATSAPP_BOOKING_TEMPLATE_LANG', 'en');
+
+            // 1. Primary: Send via official approved Meta Template (works 24/7 for all customers)
+            $templatePayload = [
                 'messaging_product' => 'whatsapp',
                 'to'                => $cleanDigits,
-                'type'              => 'text',
-                'text'              => ['body' => $text],
+                'type'              => 'template',
+                'template'          => [
+                    'name'     => $templateName,
+                    'language' => ['code' => $templateLang],
+                    'components' => [
+                        [
+                            'type' => 'body',
+                            'parameters' => [
+                                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                                ['type' => 'text', 'text' => (string)$gcNo],
+                                ['type' => 'text', 'text' => (string)$from],
+                                ['type' => 'text', 'text' => (string)$to],
+                                ['type' => 'text', 'text' => (string)$amount],
+                                ['type' => 'text', 'text' => (string)$accType],
+                            ]
+                        ]
+                    ]
+                ]
             ];
 
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/json',
-                "Authorization: Bearer {$token}",
-            ]);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+            $sendCurl = function($p) use ($url, $token) {
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($p));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    "Authorization: Bearer {$token}",
+                ]);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 20);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($ch);
-            curl_close($ch);
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
+                curl_close($ch);
 
-            $decoded = json_decode($response, true);
+                return [
+                    'httpCode'  => $httpCode,
+                    'decoded'   => json_decode($response, true),
+                    'curlError' => $curlError,
+                ];
+            };
+
+            $res = $sendCurl($templatePayload);
+            $httpCode = $res['httpCode'];
+            $decoded  = $res['decoded'];
+            $curlError = $res['curlError'];
+
+            // 2. Fallback: If template is still pending or not approved, try regular text message
+            if (!($httpCode >= 200 && $httpCode < 300 && isset($decoded['messages'][0]['id']))) {
+                $textPayload = [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $cleanDigits,
+                    'type'              => 'text',
+                    'text'              => ['body' => $text],
+                ];
+                $fallbackRes = $sendCurl($textPayload);
+                if ($fallbackRes['httpCode'] >= 200 && $fallbackRes['httpCode'] < 300 && isset($fallbackRes['decoded']['messages'][0]['id'])) {
+                    $httpCode  = $fallbackRes['httpCode'];
+                    $decoded   = $fallbackRes['decoded'];
+                    $curlError = $fallbackRes['curlError'];
+                }
+            }
+
             $sent = ($httpCode >= 200 && $httpCode < 300 && isset($decoded['messages'][0]['id']));
             $msgId = $decoded['messages'][0]['id'] ?? null;
             $err = $decoded['error']['message'] ?? $curlError ?? null;
 
             // Log to message_logs if table exists
-            try {
-                \App\Models\MessageLog::create([
-                    'channel'        => 'whatsapp',
-                    'recipient_name' => $recipientName,
-                    'phone'          => $cleanDigits,
-                    'message_type'   => 'gc_booking',
-                    'template_id'    => null,
-                    'message_body'   => $text,
-                    'status'         => $sent ? 'sent' : 'failed',
-                    'external_id'    => $msgId,
-                    'error_message'  => $err,
-                    'branch_id'      => $waybill->origin_branch_id,
-                    'user_id'        => $waybill->created_by,
-                    'sent_at'        => now(),
-                ]);
-            } catch (\Exception $logEx) {
-                \Log::warning("Failed to create message log: " . $logEx->getMessage());
+            if (\Illuminate\Support\Facades\Schema::hasTable('message_logs')) {
+                try {
+                    \App\Models\MessageLog::create([
+                        'channel'        => 'whatsapp',
+                        'recipient_name' => $recipientName,
+                        'phone'          => $cleanDigits,
+                        'message_type'   => 'gc_booking',
+                        'template_id'    => null,
+                        'message_body'   => $text,
+                        'status'         => $sent ? 'sent' : 'failed',
+                        'external_id'    => $msgId,
+                        'error_message'  => $err,
+                        'branch_id'      => $waybill->origin_branch_id,
+                        'user_id'        => $waybill->created_by,
+                        'sent_at'        => now(),
+                    ]);
+                } catch (\Exception $logEx) {
+                    \Log::warning("Failed to create message log: " . $logEx->getMessage());
+                }
             }
 
             return [
