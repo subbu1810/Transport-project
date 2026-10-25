@@ -135,6 +135,17 @@ class BackupController extends Controller
             unlink($sqlFile);
         }
 
+        // Auto-prune: Keep only the newest 2 backups on disk to protect server storage
+        $existingZips = glob($folder . '/*.zip');
+        if ($existingZips && count($existingZips) > 2) {
+            usort($existingZips, function ($a, $b) {
+                return filemtime($b) - filemtime($a);
+            });
+            foreach (array_slice($existingZips, 2) as $oldZip) {
+                @unlink($oldZip);
+            }
+        }
+
         return basename($zipFile);
     }
 

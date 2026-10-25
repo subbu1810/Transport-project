@@ -15,3 +15,6 @@ Schedule::command('backup:run')->weekly()->when(function () {
     $autoBackup = \App\Models\Setting::where('key', 'auto_backup')->first();
     return $autoBackup && filter_var($autoBackup->value, FILTER_VALIDATE_BOOLEAN);
 });
+
+// Auto Cleanup - Automatically prunes old backups daily so VPS disk never fills up
+Schedule::command('backup:clean')->daily();
