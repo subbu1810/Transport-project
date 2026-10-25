@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
     Search, Package, Truck, Box, AlertCircle, X, Printer, Loader2,
     MapPin, History, CheckCircle, ChevronRight, FileText, CreditCard,
-    Image as ImageIcon, Calendar, User, ArrowRight, Zap, Info, Archive, HelpCircle, Trash2
+    Image as ImageIcon, Calendar, User, ArrowRight, Zap, Info, Archive, HelpCircle, Trash2, Download
 } from 'lucide-react'
 import axios from 'axios'
 import GCPrintReceipt from '../components/GCPrintReceipt'
@@ -88,6 +88,30 @@ function GCTracking() {
     const showToast = (message, type = 'error') => {
         setToast({ show: true, message, type })
         setTimeout(() => setToast({ show: false, message: '', type: 'error' }), 4000)
+    }
+
+    const handleDownloadPod = async (proofPath, gcNumber) => {
+        if (!proofPath) return
+        const fileUrl = `${STORAGE_URL}/${proofPath}`
+        try {
+            const response = await fetch(fileUrl)
+            const blob = await response.blob()
+            const blobUrl = window.URL.createObjectURL(blob)
+            const ext = proofPath.split('.').pop() || 'jpg'
+            const link = document.createElement('a')
+            link.href = blobUrl
+            link.download = `POD_${gcNumber || 'document'}.${ext}`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            window.URL.revokeObjectURL(blobUrl)
+        } catch (e) {
+            const link = document.createElement('a')
+            link.href = fileUrl
+            link.target = '_blank'
+            link.download = `POD_${gcNumber || 'document'}`
+            link.click()
+        }
     }
 
     React.useEffect(() => {
@@ -1058,9 +1082,21 @@ function GCTracking() {
                                 <div className="p-1.5 bg-white/15 rounded-lg"><ImageIcon size={14} className="text-white" /></div>
                                 <h2 className="text-white font-black text-xs uppercase tracking-widest">Acknowledgement / POD</h2>
                             </div>
-                            <button onClick={() => setShowAckModal(false)} className="p-2 hover:bg-white/10 text-white/70 hover:text-white transition-colors rounded-lg">
-                                <X size={16} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {trackingData.delivery_proof && (
+                                    <button
+                                        onClick={() => handleDownloadPod(trackingData.delivery_proof, trackingData.gc_number)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white font-bold text-[11px] rounded-lg transition-all"
+                                        title="Download POD"
+                                    >
+                                        <Download size={13} />
+                                        <span>Download</span>
+                                    </button>
+                                )}
+                                <button onClick={() => setShowAckModal(false)} className="p-2 hover:bg-white/10 text-white/70 hover:text-white transition-colors rounded-lg">
+                                    <X size={16} />
+                                </button>
+                            </div>
                         </div>
                         <div className="bg-slate-100 flex-1 min-h-[320px] flex items-center justify-center p-4">
                             {trackingData.delivery_proof ? (
@@ -1100,7 +1136,15 @@ function GCTracking() {
                                 </div>
                             )}
                         </div>
-                        <div className="p-4 bg-white flex justify-end">
+                        <div className="p-4 bg-white flex items-center justify-between border-t border-gray-100">
+                            {trackingData.delivery_proof ? (
+                                <button
+                                    onClick={() => handleDownloadPod(trackingData.delivery_proof, trackingData.gc_number)}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-black text-xs uppercase rounded-xl shadow hover:shadow-md active:scale-95 transition-all"
+                                >
+                                    <Download size={14} /> Download POD
+                                </button>
+                            ) : <div />}
                             <button onClick={() => setShowAckModal(false)} className="px-6 py-2.5 bg-slate-800 text-white font-black text-xs uppercase rounded-xl shadow hover:bg-slate-900 active:scale-95 transition-all">Close</button>
                         </div>
                     </div>
