@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { AlertTriangle } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import TabbedInterface from './components/TabbedInterface'
@@ -162,7 +163,8 @@ function App() {
     return <LandingPage onComplete={() => setShowSplash(false)} />
   }
 
-  // Lockdown View
+  // Lockdown View (temporarily commented out)
+  /*
   if (isAuthenticated && isLocked) {
     return (
       <Router>
@@ -181,6 +183,7 @@ function App() {
       </Router>
     )
   }
+  */
 
   if (isAuthenticated && isBackupLocked) {
       return <ForceBackupOverlay onComplete={() => {

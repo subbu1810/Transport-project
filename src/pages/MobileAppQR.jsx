@@ -183,7 +183,19 @@ export default function MobileAppQR() {
       detected = ALL_TRANSPORTS.find(t => API_BASE_URL.startsWith(t.apiUrl.replace("/api/v1", "")));
     }
 
-    setTransport(detected || null);
+    if (detected) {
+      setTransport({ ...detected, apiUrl: API_BASE_URL });
+    } else {
+      let userObj = {};
+      try { userObj = userStr ? JSON.parse(userStr) : {}; } catch (e) {}
+      setTransport({
+        code: userObj.transport_name || "LIFE",
+        name: userObj.transport_name || "Life Transport",
+        apiUrl: API_BASE_URL,
+        bg: "from-emerald-500 to-green-600",
+        light: "bg-emerald-50 border-emerald-200",
+      });
+    }
     setLoading(false);
   }, []);
 
