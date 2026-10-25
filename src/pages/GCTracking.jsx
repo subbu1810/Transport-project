@@ -90,28 +90,15 @@ function GCTracking() {
         setTimeout(() => setToast({ show: false, message: '', type: 'error' }), 4000)
     }
 
-    const handleDownloadPod = async (proofPath, gcNumber) => {
+    const handleDownloadPod = (proofPath, gcNumber) => {
         if (!proofPath) return
-        const fileUrl = `${STORAGE_URL}/${proofPath}`
-        try {
-            const response = await fetch(fileUrl)
-            const blob = await response.blob()
-            const blobUrl = window.URL.createObjectURL(blob)
-            const ext = proofPath.split('.').pop() || 'jpg'
-            const link = document.createElement('a')
-            link.href = blobUrl
-            link.download = `POD_${gcNumber || 'document'}.${ext}`
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            window.URL.revokeObjectURL(blobUrl)
-        } catch (e) {
-            const link = document.createElement('a')
-            link.href = fileUrl
-            link.target = '_blank'
-            link.download = `POD_${gcNumber || 'document'}`
-            link.click()
-        }
+        const downloadUrl = `${API_BASE_URL}/waybills/download-pod?path=${encodeURIComponent(proofPath)}&gc_number=${encodeURIComponent(gcNumber || 'document')}`
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.setAttribute('download', '')
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
     }
 
     React.useEffect(() => {

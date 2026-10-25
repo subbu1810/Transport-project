@@ -2117,6 +2117,34 @@ class WaybillController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    public function downloadPod(Request $request)
+    {
+        $path = $request->query('path');
+        $gcNumber = $request->query('gc_number', 'document');
+
+        if (!$path) {
+            return response()->json(['success' => false, 'message' => 'Path parameter is required'], 400);
+        }
+
+        // Prevent directory traversal
+        $cleanPath = ltrim(str_replace(['../', '..\\'], '', $path), '/\\');
+        $fullPath = storage_path('app/public/' . $cleanPath);
+
+        if (!file_exists($fullPath)) {
+            $altPath = storage_path('app/' . $cleanPath);
+            if (file_exists($altPath)) {
+                $fullPath = $altPath;
+            } else {
+                return response()->json(['success' => false, 'message' => 'File not found on server'], 404);
+            }
+        }
+
+        $extension = pathinfo($fullPath, PATHINFO_EXTENSION) ?: 'jpg';
+        $downloadName = "POD_{$gcNumber}.{$extension}";
+
+        return response()->download($fullPath, $downloadName);
+    }
 }
 
 

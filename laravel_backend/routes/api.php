@@ -164,6 +164,7 @@ Route::prefix('v1')->group(function () {
     Route::get('branch-destination-mappings/branch/{branchId}', [BranchDestinationMappingController::class , 'getAssignedByBranch']);
 
     // Waybill routes
+    Route::get('waybills/download-pod', [WaybillController::class , 'downloadPod']);
     Route::get('waybills/search/{gcNumber}', [WaybillController::class , 'searchByGcNumber']);
     Route::get('waybills/init-data', [WaybillController::class , 'initData']);
     Route::apiResource('waybills', WaybillController::class);
