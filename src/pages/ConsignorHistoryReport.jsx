@@ -319,30 +319,69 @@ function ConsignorHistoryReport() {
   }
 
   const exportToCSV = () => {
-    if (data.waybills.length === 0) return
+    if (sortedWaybills.length === 0) return
+
     const headers = [
-      'Date', 'GC Number', 'Invoice No', 'Consignee', 'Destination', 'Articles', 'Weight', 'Content', 
-      'Freight', 'DD Charges', 'Handling', 'St. Charges', 'GST', 'Total', 'Type'
+      '#', 'BILL DATE', 'GC NO', 'INV NO', 'CONSIGNEE', 'DESTINATION', 
+      'ART', 'WT', 'RATE', 'FREIGHT', 'DD', 'HANDL.', 'ST.CH.', 'GST', 'TOTAL', 'TYPE'
     ]
+
+    const totalFreight = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.freight_amount || 0), 0)
+    const totalDD = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.dd_charges || 0), 0)
+    const totalHandling = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.handling_charges || 0), 0)
+    const totalSt = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.stationary_charges || 0), 0)
+    const totalGST = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.gst_amount || 0), 0)
+    const totalGrand = sortedWaybills.reduce((s, wb) => s + parseFloat(wb.grand_total || 0), 0)
+    const totalArt = sortedWaybills.reduce((s, wb) => s + parseInt(wb.total_articles || 0), 0)
+
+    const rows = sortedWaybills.map((wb, i) => {
+      const rate = parseInt(wb.total_articles) > 0 
+        ? (parseFloat(wb.freight_amount || 0) / parseInt(wb.total_articles)).toFixed(2) 
+        : '0.00'
+
+      return [
+        i + 1,
+        wb.bill_date || '',
+        wb.gc_number || '',
+        wb.invoice_no || '',
+        `"${(wb.consignee?.name || 'N/A').replace(/"/g, '""')}"`,
+        `"${(wb.destination?.city_name || 'N/A').replace(/"/g, '""')}"`,
+        wb.total_articles,
+        parseFloat(wb.actual_weight || 0).toFixed(2),
+        rate,
+        parseFloat(wb.freight_amount || 0).toFixed(2),
+        parseFloat(wb.dd_charges || 0).toFixed(2),
+        parseFloat(wb.handling_charges || 0).toFixed(2),
+        parseFloat(wb.stationary_charges || 0).toFixed(2),
+        parseFloat(wb.gst_amount || 0).toFixed(2),
+        parseFloat(wb.grand_total || 0).toFixed(2),
+        wb.account_type?.toUpperCase() || ''
+      ].join(',')
+    })
+
+    const totalsRow = [
+      '',
+      'Total',
+      '',
+      '',
+      '',
+      '',
+      totalArt,
+      '',
+      '',
+      totalFreight.toFixed(2),
+      totalDD.toFixed(2),
+      totalHandling.toFixed(2),
+      totalSt.toFixed(2),
+      totalGST.toFixed(2),
+      totalGrand.toFixed(2),
+      ''
+    ].join(',')
+
     const csvContent = [
       headers.join(','),
-      ...sortedWaybills.map(wb => [
-        wb.bill_date,
-        wb.gc_number,
-        wb.invoice_no || 'N/A',
-        `"${wb.consignee?.name || 'N/A'}"`,
-        wb.destination?.city_name || 'N/A',
-        wb.total_articles,
-        wb.actual_weight || 0,
-        `"${(wb.article_desc || '').replace(/"/g, '""')}"`,
-        wb.freight_amount,
-        wb.dd_charges,
-        wb.handling_charges,
-        wb.stationary_charges,
-        wb.gst_amount,
-        wb.grand_total,
-        wb.account_type
-      ].join(','))
+      ...rows,
+      totalsRow
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
