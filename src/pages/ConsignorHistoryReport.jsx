@@ -1037,7 +1037,7 @@ function ConsignorHistoryReport() {
 
       {/* Print Preview & Download Modal */}
       {showPrintModal && selectedWaybillForPrint && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-white animate-in fade-in zoom-in duration-200 no-print">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white animate-in fade-in zoom-in duration-200 gc-receipt-print-modal">
           {/* Modal Header */}
           <div className="p-4 border-b flex justify-between items-center bg-gray-50 no-print shadow-sm">
             <div className="flex items-center gap-3">
@@ -1176,6 +1176,18 @@ function ConsignorHistoryReport() {
         @media print {
           @page { size: A4 portrait; margin: 0mm; }
 
+          html, 
+          #root, 
+          #root > div, 
+          main, 
+          .min-h-screen {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            position: relative !important;
+            display: block !important;
+          }
+
           .consignor-history-main-content,
           .no-print,
           header,
@@ -1189,6 +1201,19 @@ function ConsignorHistoryReport() {
             padding: 0 !important;
             background: white !important;
             overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          .gc-receipt-print-modal {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            background: white !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           #printable-gc-receipt,
@@ -1200,6 +1225,7 @@ function ConsignorHistoryReport() {
             box-shadow: none !important;
             width: 100% !important;
             display: block !important;
+            overflow: visible !important;
           }
 
           .receipt-container {
