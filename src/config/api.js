@@ -13,7 +13,12 @@ const getApiBaseUrl = () => {
       return `${protocol}//${hostname}/api/v1`;
     }
 
-    // 3. Dynamic Subdomain: e.g. lifetransport.ssquareg.io -> api.lifetransport.ssquareg.io
+    // 3. Mallikarjuna Parcel Service
+    if (hostname.includes('mallikarjuna')) {
+      return 'https://mallikarjuna-api.ssquareg.tech/api/v1';
+    }
+
+    // 4. Dynamic Subdomain: e.g. lifetransport.ssquareg.io -> api.lifetransport.ssquareg.io
     if (!hostname.startsWith('api.')) {
       return `${protocol}//api.${hostname}/api/v1`;
     }
@@ -21,7 +26,7 @@ const getApiBaseUrl = () => {
     return `${protocol}//${hostname}/api/v1`;
   }
 
-  return 'https://api.lifetransport.ssquareg.io/api/v1';
+  return 'https://mallikarjuna-api.ssquareg.tech/api/v1';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
