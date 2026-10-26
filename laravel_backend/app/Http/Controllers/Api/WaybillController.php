@@ -227,7 +227,8 @@ class WaybillController extends Controller
                 }
             }
 
-            // Maintenance Validation: Block operations if overdue bills
+            // Maintenance Validation: Block operations if overdue bills (temporarily commented out)
+            /*
             $today = now();
             if ($today->day > 10) {
                 // Check if branch has an unpaid bill for PREVIOUS months
@@ -248,6 +249,7 @@ class WaybillController extends Controller
                     ], 403);
                 }
             }
+            */
 
             $isPaidImmediately = $validated['account_type'] === 'paid' && (bool) $request->input('cash_received', true);
 

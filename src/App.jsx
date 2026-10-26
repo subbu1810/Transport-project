@@ -204,7 +204,7 @@ function App() {
           <div className="flex h-screen bg-gray-100 print:block print:h-auto">
             <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
             <div className="flex-1 flex flex-col overflow-hidden print:block print:overflow-visible">
-              <MaintenanceAlert />
+              {/* <MaintenanceAlert /> */}
               <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} onLogout={handleLogout} />
               <main className="flex-1 flex flex-col overflow-hidden print:block print:overflow-visible">
                 <div className="flex-1 overflow-auto print:block print:overflow-visible">
