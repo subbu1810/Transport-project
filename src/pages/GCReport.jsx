@@ -161,7 +161,7 @@ function GCReport() {
       setLoading(true)
       setError('')
 
-      const params = { full_data: '1' }
+      const params = {}
       if (filters.fromDate) params.from_date = filters.fromDate
       if (filters.toDate) params.to_date = filters.toDate
       if (filters.branchId) params.branch_id = filters.branchId
