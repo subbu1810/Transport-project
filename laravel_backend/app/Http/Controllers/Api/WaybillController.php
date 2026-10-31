@@ -2072,39 +2072,47 @@ class WaybillController extends Controller
                   . "Thank you for shipping with us!";
 
             // Send via Meta WhatsApp Cloud API using curl
-            $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+            $url = "https://graph.facebook.com/v21.0/{$phoneId}/messages";
             
             $templateName = env('WHATSAPP_BOOKING_TEMPLATE', 'gc_booking_update');
             $customLang   = env('WHATSAPP_BOOKING_TEMPLATE_LANG', null);
             $languages    = $customLang ? [$customLang] : ['en', 'en_US'];
 
-            $articlesStr = trim($articles . $articleDesc) ?: '1 Box';
+            $consignorName = $waybill->consignor->name ?? 'Consignor';
+            $consigneeName = $waybill->consignee->name ?? 'Consignee';
+            $weightInfo = $waybill->chargeable_weight ? " ({$waybill->chargeable_weight} Kg)" : ($waybill->actual_weight ? " ({$waybill->actual_weight} Kg)" : "");
+            $articlesStr = trim($articles . $articleDesc . $weightInfo) ?: '1 Box';
+
+            $fromWithConsignor = "{$from} [Consignor: {$consignorName}]";
+            $toWithConsignee = "{$to} [Consignee: {$consigneeName}]";
+            $amountWithMode = "{$amount} [{$accType}]";
+            $trackingParam = $trackUrl ? "Track: {$trackUrl}" : "Sri Mallikarjuna";
 
             $params7 = [
-                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
-                ['type' => 'text', 'text' => (string)$gcNo],
-                ['type' => 'text', 'text' => (string)$from],
-                ['type' => 'text', 'text' => (string)$to],
-                ['type' => 'text', 'text' => (string)$articlesStr],
-                ['type' => 'text', 'text' => (string)$amount],
-                ['type' => 'text', 'text' => (string)$accType],
+                ['type' => 'text', 'text' => (string)($recipientName ?: $consignorName)], // {{1}} Greeting
+                ['type' => 'text', 'text' => (string)$gcNo],                             // {{2}} GC No
+                ['type' => 'text', 'text' => (string)$fromWithConsignor],                // {{3}} From + Consignor
+                ['type' => 'text', 'text' => (string)$toWithConsignee],                  // {{4}} To + Consignee
+                ['type' => 'text', 'text' => (string)$articlesStr],                      // {{5}} Articles + Weight
+                ['type' => 'text', 'text' => (string)$amountWithMode],                   // {{6}} Amount + Payment Mode
+                ['type' => 'text', 'text' => (string)$trackingParam],                    // {{7}} Live Tracking URL
             ];
 
             $params6 = [
-                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                ['type' => 'text', 'text' => (string)($recipientName ?: $consignorName)],
                 ['type' => 'text', 'text' => (string)$gcNo],
-                ['type' => 'text', 'text' => (string)$from],
-                ['type' => 'text', 'text' => (string)$to],
-                ['type' => 'text', 'text' => (string)$amount],
-                ['type' => 'text', 'text' => (string)$accType],
+                ['type' => 'text', 'text' => (string)$fromWithConsignor],
+                ['type' => 'text', 'text' => (string)$toWithConsignee],
+                ['type' => 'text', 'text' => (string)$articlesStr],
+                ['type' => 'text', 'text' => (string)$amountWithMode],
             ];
 
             $params5 = [
-                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                ['type' => 'text', 'text' => (string)($recipientName ?: $consignorName)],
                 ['type' => 'text', 'text' => (string)$gcNo],
-                ['type' => 'text', 'text' => (string)$from],
-                ['type' => 'text', 'text' => (string)$to],
-                ['type' => 'text', 'text' => (string)$amount],
+                ['type' => 'text', 'text' => (string)$fromWithConsignor],
+                ['type' => 'text', 'text' => (string)$toWithConsignee],
+                ['type' => 'text', 'text' => (string)$amountWithMode],
             ];
 
             $sendCurl = function($p) use ($url, $token) {
