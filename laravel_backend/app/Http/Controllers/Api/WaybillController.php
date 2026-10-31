@@ -1931,34 +1931,90 @@ class WaybillController extends Controller
             $companyName = env('APP_NAME', 'Sri Mallikarjuna Parcel Service');
             $gcNo = $waybill->gc_number;
             $deliveredAt = $waybill->delivered_at ? date('d-m-Y H:i', strtotime($waybill->delivered_at)) : date('d-m-Y H:i');
+            $consigneeName = $waybill->consignee->name ?? 'Customer';
+
+            // Generate secure tracking & digital receipt link
+            $appUrl = rtrim(env('APP_URL', 'https://mallikarjuna-api.ssquareg.tech'), '/');
+            $trackToken = self::generateTrackingToken($gcNo);
+            $trackUrl = "{$appUrl}/track/{$gcNo}?token={$trackToken}";
 
             $body = "🚚 *{$companyName}*\n\n"
                   . "✅ *Consignment Delivered Successfully!*\n\n"
-                  . "• *GC No:* {$gcNo}\n"
+                  . "• *GC No:* #{$gcNo}\n"
                   . "• *Delivered At:* {$deliveredAt}\n"
-                  . "• *Consignee:* " . ($waybill->consignee->name ?? 'N/A') . "\n"
-                  . "• *Status:* DELIVERED 📦\n\n"
+                  . "• *Consignee:* {$consigneeName}\n"
+                  . "• *Status:* DELIVERED 📦\n"
+                  . (!empty($waybill->delivery_proof) ? "• *POD Attached: Signed Delivery Receipt*\n\n" : "\n")
+                  . "📍 *Receipt Details:* {$trackUrl}\n\n"
                   . "Thank you for shipping with {$companyName}!";
 
-            $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+            $url = "https://graph.facebook.com/v21.0/{$phoneId}/messages";
+
+            // If a POD image is uploaded, send directly as WhatsApp media image with caption
+            $hasPodImage = false;
+            $podUrl = null;
+            if (!empty($waybill->delivery_proof)) {
+                $ext = strtolower(pathinfo($waybill->delivery_proof, PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $hasPodImage = true;
+                    $podUrl = "{$appUrl}/storage/" . ltrim($waybill->delivery_proof, '/');
+                }
+            }
+
+            if ($hasPodImage && $podUrl) {
+                $postData = [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $cleanDigits,
+                    'type'              => 'image',
+                    'image'             => [
+                        'link'    => $podUrl,
+                        'caption' => $body
+                    ]
+                ];
+            } else {
+                $postData = [
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $cleanDigits,
+                    'type'              => 'text',
+                    'text'              => ['body' => $body]
+                ];
+            }
+
             $ch = curl_init($url);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-                'messaging_product' => 'whatsapp',
-                'to'                => $cleanDigits,
-                'type'              => 'text',
-                'text'              => ['body' => $body]
-            ]));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Content-Type: application/json',
                 "Authorization: Bearer {$token}",
             ]);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
+
+            // Fallback: If image send failed, retry with plain text notification
+            if (($httpCode < 200 || $httpCode >= 300) && $hasPodImage) {
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                    'messaging_product' => 'whatsapp',
+                    'to'                => $cleanDigits,
+                    'type'              => 'text',
+                    'text'              => ['body' => $body]
+                ]));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    "Authorization: Bearer {$token}",
+                ]);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+            }
 
             return [
                 'success' => ($httpCode >= 200 && $httpCode < 300),
