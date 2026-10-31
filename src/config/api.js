@@ -1,34 +1,8 @@
-// Dynamically resolve API URL based on current host/subdomain
-const getApiBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    const { hostname, protocol } = window.location;
-
-    // 1. Local Testing
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:8000/api/v1';
-    }
-
-    // 2. Direct IP Testing
-    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-      return `${protocol}//${hostname}/api/v1`;
-    }
-
-    // 3. Mallikarjuna Parcel Service
-    if (hostname.includes('mallikarjuna')) {
-      return 'https://mallikarjuna-api.ssquareg.tech/api/v1';
-    }
-
-    // 4. Dynamic Subdomain: e.g. lifetransport.ssquareg.io -> api.lifetransport.ssquareg.io
-    if (!hostname.startsWith('api.')) {
-      return `${protocol}//api.${hostname}/api/v1`;
-    }
-
-    return `${protocol}//${hostname}/api/v1`;
-  }
-
-  return 'https://mallikarjuna-api.ssquareg.tech/api/v1';
-};
-
-export const API_BASE_URL = getApiBaseUrl();
+// Active backend API - Life Transport
+export const API_BASE_URL = 'https://api.lifetransport.ssquareg.io/api/v1';
 export const STORAGE_URL = API_BASE_URL.replace('/api/v1', '/storage');
+
+// Other environments (commented for quick reference):
+// export const API_BASE_URL = 'http://localhost:8000/api/v1'; // Local Testing
+// export const API_BASE_URL = 'https://mallikarjuna-api.ssquareg.tech/api/v1'; // Mallikarjuna
 

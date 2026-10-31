@@ -22,7 +22,7 @@ const ALL_TRANSPORTS = [
   {
     code: "LIFE",
     name: "Life Transport",
-    apiUrl: "https://api.lifetransport.ssquareg.com/api/v1",
+    apiUrl: "https://api.lifetransport.ssquareg.io/api/v1",
     bg: "from-emerald-500 to-green-600",
     light: "bg-emerald-50 border-emerald-200",
   },

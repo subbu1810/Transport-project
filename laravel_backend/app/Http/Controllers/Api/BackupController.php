@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Setting;
 use App\Models\BackupLog;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+
 
 class BackupController extends Controller
 {
@@ -42,52 +43,40 @@ class BackupController extends Controller
             'type' => 'required|in:database,files,combined'
         ]);
 
+        // Skip Spatie/Artisan entirely (causes Blade cache errors in API context).
+        // Use the native PHP backup directly.
         try {
-            // Force register the backup command since it's only loaded in console by default
-            \Illuminate\Support\Facades\Artisan::registerCommand(app(\Spatie\Backup\Commands\BackupCommand::class));
-
-            $params = [];
-            if ($request->type === 'database') {
-                $params['--only-db'] = true;
-            } elseif ($request->type === 'files') {
-                $params['--only-files'] = true;
-            }
-            
-            $exitCode = Artisan::call('backup:run', $params);
-            
-            if ($exitCode !== 0) {
-                throw new \Exception(Artisan::output() ?: 'Backup command failed with exit code ' . $exitCode);
-            }
-
+            $zipFileName = $this->generatePhpNativeBackup();
             return response()->json([
                 'success' => true,
-                'message' => 'Backup generated successfully.'
+                'message' => 'Backup generated successfully.',
+                'file' => $zipFileName
             ]);
         } catch (\Exception $e) {
-            \Log::warning('Spatie backup failed, attempting native PHP backup fallback: ' . $e->getMessage());
-            
-            try {
-                $zipFileName = $this->generatePhpNativeBackup();
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Backup generated successfully via native exporter.',
-                    'file' => $zipFileName
-                ]);
-            } catch (\Exception $fallbackError) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Backup failed: ' . $e->getMessage() . ' | Fallback error: ' . $fallbackError->getMessage()
-                ], 500);
-            }
+            Log::error('Native backup failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Backup failed: ' . $e->getMessage()
+            ], 500);
         }
     }
 
     private function generatePhpNativeBackup()
     {
-        $appName = config('backup.backup.name') ?? config('app.name', 'Transport Management System');
-        $folder = storage_path('app/' . $appName);
-        if (!file_exists($folder)) {
-            mkdir($folder, 0777, true);
+        $appName = preg_replace('/[^A-Za-z0-9_\-]/', '_', config('app.name', 'TransportBackup'));
+
+        // Try storage/app first; fall back to system temp dir if not writable
+        $baseDir = storage_path('app');
+        if (!is_dir($baseDir) || !is_writable($baseDir)) {
+            $baseDir = sys_get_temp_dir();
+        }
+        $folder = $baseDir . DIRECTORY_SEPARATOR . $appName;
+
+        if (!is_dir($folder)) {
+            if (!@mkdir($folder, 0775, true)) {
+                // Last resort: just use the base writable dir directly
+                $folder = $baseDir;
+            }
         }
 
         $timestamp = date('Y-m-d-H-i-s');
@@ -252,7 +241,7 @@ class BackupController extends Controller
             ]);
         } catch (\Exception $e) {
             // Log error silently to not disrupt the download
-            \Log::error('Failed to create BackupLog: ' . $e->getMessage());
+            Log::error('Failed to create BackupLog: ' . $e->getMessage());
         }
 
         return $disk->download($foundPath);
