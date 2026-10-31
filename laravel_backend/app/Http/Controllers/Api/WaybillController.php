@@ -1953,9 +1953,21 @@ class WaybillController extends Controller
             // Send via Meta WhatsApp Cloud API using curl
             $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
             
-            $templateName = env('WHATSAPP_BOOKING_TEMPLATE', 'gc_booking_confirmation');
+            $templateName = env('WHATSAPP_BOOKING_TEMPLATE', 'gc_booking_update');
             $customLang   = env('WHATSAPP_BOOKING_TEMPLATE_LANG', null);
-            $languages    = $customLang ? [$customLang] : ['en_US', 'en'];
+            $languages    = $customLang ? [$customLang] : ['en', 'en_US'];
+
+            $articlesStr = trim($articles . $articleDesc) ?: '1 Box';
+
+            $params7 = [
+                ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
+                ['type' => 'text', 'text' => (string)$gcNo],
+                ['type' => 'text', 'text' => (string)$from],
+                ['type' => 'text', 'text' => (string)$to],
+                ['type' => 'text', 'text' => (string)$articlesStr],
+                ['type' => 'text', 'text' => (string)$amount],
+                ['type' => 'text', 'text' => (string)$accType],
+            ];
 
             $params6 = [
                 ['type' => 'text', 'text' => (string)($recipientName ?: 'Customer')],
@@ -2005,9 +2017,9 @@ class WaybillController extends Controller
             $decoded = null;
             $curlError = null;
 
-            // Try template combinations: language (en_US, en) x parameter counts (6, 5)
+            // Try template combinations: language (en, en_US) x parameter counts (7, 6, 5)
             foreach ($languages as $lang) {
-                foreach ([$params6, $params5] as $paramSet) {
+                foreach ([$params7, $params6, $params5] as $paramSet) {
                     $templatePayload = [
                         'messaging_product' => 'whatsapp',
                         'to'                => $cleanDigits,
