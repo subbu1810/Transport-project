@@ -63,6 +63,49 @@ export default function Communication() {
   const [testingMeta, setTestingMeta] = useState(false);
   const [metaTestResponse, setMetaTestResponse] = useState(null);
 
+  // Automated Messaging Controls state
+  const [messagingSettings, setMessagingSettings] = useState({
+    whatsapp_enabled: true,
+    whatsapp_notify_booking: true,
+    whatsapp_notify_delivery: true,
+    whatsapp_include_tracking: true,
+  });
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const fetchMessagingSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const res = await fetch(`${API_BASE_URL}/settings/messaging`);
+      const data = await res.json();
+      if (data && data.success && data.data) {
+        setMessagingSettings(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching messaging settings:', err);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleToggle = async (key) => {
+    const updated = { ...messagingSettings, [key]: !messagingSettings[key] };
+    setMessagingSettings(updated);
+    try {
+      setSavingSettings(true);
+      await fetch(`${API_BASE_URL}/settings/messaging`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: updated[key] }),
+      });
+    } catch (err) {
+      console.error('Error saving messaging setting:', err);
+      setMessagingSettings(messagingSettings);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   // Webhook and environment helpers
   const backendBase = (API_BASE_URL || '').replace(/\/api\/v1\/?$/, '');
   const isLocalhost = backendBase.includes('localhost') || backendBase.includes('127.0.0.1');
@@ -122,6 +165,7 @@ export default function Communication() {
   useEffect(() => {
     fetchTemplates();
     fetchLogs();
+    fetchMessagingSettings();
   }, []);
 
   // Re-fetch when switching to relevant tab
@@ -347,6 +391,23 @@ export default function Communication() {
         >
           <Clock className="w-4 h-4" />
           Delivery Logs
+        </button>
+
+        <button
+          onClick={() => setActiveTab('controls')}
+          className={`flex items-center gap-2 py-3 px-4 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
+            activeTab === 'controls'
+              ? 'border-emerald-600 text-emerald-600 bg-emerald-50/40 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-emerald-600" />
+          <span>Automated Messaging Controls</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+            messagingSettings.whatsapp_enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+          }`}>
+            {messagingSettings.whatsapp_enabled ? 'ACTIVE' : 'PAUSED'}
+          </span>
         </button>
 
         <button
@@ -774,6 +835,160 @@ export default function Communication() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: AUTOMATED MESSAGING CONTROLS */}
+      {(activeTab === 'controls' || activeTab === 'settings') && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                <Sliders className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Automated Messaging Controls</h2>
+                <p className="text-xs text-gray-500">
+                  Activate or deactivate automatic WhatsApp messages sent to customers & consignors
+                </p>
+              </div>
+            </div>
+            {savingSettings && (
+              <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 animate-pulse">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving changes...
+              </div>
+            )}
+          </div>
+
+          {/* Master Switch */}
+          <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${messagingSettings.whatsapp_enabled ? 'bg-emerald-50/60 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${messagingSettings.whatsapp_enabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                  <span className="font-bold text-gray-900 text-sm sm:text-base">
+                    Master WhatsApp Notifications Switch
+                  </span>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${messagingSettings.whatsapp_enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'}`}>
+                    {messagingSettings.whatsapp_enabled ? 'ACTIVE' : 'PAUSED'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Global switch to enable or turn off all automated WhatsApp dispatches from this ERP.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleToggle('whatsapp_enabled')}
+                disabled={savingSettings}
+                className={`relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  messagingSettings.whatsapp_enabled ? 'bg-emerald-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    messagingSettings.whatsapp_enabled ? 'translate-x-7' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Sub Toggles Grid */}
+          <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 transition-opacity ${messagingSettings.whatsapp_enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+            
+            {/* Toggle 1: Booking Update */}
+            <div className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200/80 flex flex-col justify-between space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                    📦 GC Booking Alerts
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    Auto-send WhatsApp notification with GC No, route, and charges when a consignment is booked.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('whatsapp_notify_booking')}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    messagingSettings.whatsapp_notify_booking ? 'bg-emerald-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      messagingSettings.whatsapp_notify_booking ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="text-[10px] font-semibold text-gray-400">
+                Trigger: On GC creation / save
+              </div>
+            </div>
+
+            {/* Toggle 2: Delivery & POD */}
+            <div className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200/80 flex flex-col justify-between space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                    🚚 Delivery & POD Updates
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    Auto-send WhatsApp delivery confirmation when shipment is marked delivered or POD is uploaded.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('whatsapp_notify_delivery')}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    messagingSettings.whatsapp_notify_delivery ? 'bg-emerald-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      messagingSettings.whatsapp_notify_delivery ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="text-[10px] font-semibold text-gray-400">
+                Trigger: On Upload POD / Delivery
+              </div>
+            </div>
+
+            {/* Toggle 3: Include Live Tracking Link */}
+            <div className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200/80 flex flex-col justify-between space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                    🔗 1-Click GC Tracking Link
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    Include tamper-proof live tracking link in WhatsApp messages locked strictly to that GC.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('whatsapp_include_tracking')}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    messagingSettings.whatsapp_include_tracking ? 'bg-emerald-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      messagingSettings.whatsapp_include_tracking ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="text-[10px] font-semibold text-gray-400">
+                Cryptographic HMAC Token Protection
+              </div>
+            </div>
+
           </div>
         </div>
       )}
