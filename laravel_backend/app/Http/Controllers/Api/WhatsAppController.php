@@ -129,12 +129,19 @@ class WhatsAppController extends Controller
         $token       = env('WHATSAPP_TOKEN', '');
         $phoneId     = env('WHATSAPP_PHONE_NUMBER_ID', '');
 
+        if (empty($phoneId) || $phoneId === '6005920138') {
+            $phoneId = '1345096258694763';
+        }
+        if (empty($token)) {
+            $token = 'EAAUZAAKT3fT4BS2BqVxIcr8IaQrHXteJIgj7u1uPKmtt0hbI0yUOnwfB7J6TqPh7qpymJ2WJH15FH433taGwAx5qtqqtDKCu7niTvLMn6F6q0hCYmSR9ijwoK7ygqtmQK9imUjgXAwY22ZBVMek6AX2Cc94CynJgZCzPlczAjOAZA2IXzyzxW3UiAffVYgZDZD';
+        }
+
         if (!$token || !$phoneId) {
             Log::error('[WhatsApp] WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set in .env');
             return false;
         }
 
-        $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+        $url = "https://graph.facebook.com/v21.0/{$phoneId}/messages";
 
         $body = [
             'messaging_product' => 'whatsapp',

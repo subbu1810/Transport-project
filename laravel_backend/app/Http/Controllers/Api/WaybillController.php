@@ -1902,9 +1902,17 @@ class WaybillController extends Controller
             $token = env('WHATSAPP_TOKEN', '');
             $phoneId = env('WHATSAPP_PHONE_NUMBER_ID', '');
 
+            // Fallback to Sri Mallikarjuna Parcel phone ID if old Life/Garuda ID is present
+            if (empty($phoneId) || $phoneId === '6005920138') {
+                $phoneId = '1345096258694763';
+            }
+            if (empty($token)) {
+                $token = 'EAAUZAAKT3fT4BS2BqVxIcr8IaQrHXteJIgj7u1uPKmtt0hbI0yUOnwfB7J6TqPh7qpymJ2WJH15FH433taGwAx5qtqqtDKCu7niTvLMn6F6q0hCYmSR9ijwoK7ygqtmQK9imUjgXAwY22ZBVMek6AX2Cc94CynJgZCzPlczAjOAZA2IXzyzxW3UiAffVYgZDZD';
+            }
+
             if (empty($token) || empty($phoneId)) {
                 $integration = \App\Models\WhatsAppIntegration::where('status', 'connected')->first();
-                if ($integration) {
+                if ($integration && $integration->phone_number_id !== '6005920138') {
                     $token = $integration->getDecryptedAccessToken();
                     $phoneId = $integration->phone_number_id;
                 }
@@ -1982,9 +1990,17 @@ class WaybillController extends Controller
             $token = env('WHATSAPP_TOKEN', '');
             $phoneId = env('WHATSAPP_PHONE_NUMBER_ID', '');
 
+            // Fallback to Sri Mallikarjuna Parcel phone ID if old Life/Garuda ID is present
+            if (empty($phoneId) || $phoneId === '6005920138') {
+                $phoneId = '1345096258694763';
+            }
+            if (empty($token)) {
+                $token = 'EAAUZAAKT3fT4BS2BqVxIcr8IaQrHXteJIgj7u1uPKmtt0hbI0yUOnwfB7J6TqPh7qpymJ2WJH15FH433taGwAx5qtqqtDKCu7niTvLMn6F6q0hCYmSR9ijwoK7ygqtmQK9imUjgXAwY22ZBVMek6AX2Cc94CynJgZCzPlczAjOAZA2IXzyzxW3UiAffVYgZDZD';
+            }
+
             if (empty($token) || empty($phoneId)) {
                 $integration = \App\Models\WhatsAppIntegration::where('status', 'connected')->first();
-                if ($integration) {
+                if ($integration && $integration->phone_number_id !== '6005920138') {
                     $token = $integration->getDecryptedAccessToken();
                     $phoneId = $integration->phone_number_id;
                 }
