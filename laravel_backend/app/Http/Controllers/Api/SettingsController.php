@@ -225,4 +225,55 @@ class SettingsController extends Controller
 
         return response()->json(['success' => false, 'message' => 'No QR code found to delete'], 404);
     }
+
+    /**
+     * GET /api/v1/settings/messaging
+     * Fetch WhatsApp messaging control toggles
+     */
+    public function getMessagingSettings()
+    {
+        $keys = [
+            'whatsapp_enabled'          => '1',
+            'whatsapp_notify_booking'   => '1',
+            'whatsapp_notify_delivery'  => '1',
+            'whatsapp_include_tracking' => '1',
+        ];
+
+        $results = [];
+        foreach ($keys as $key => $default) {
+            $val = Setting::where('key', $key)->value('value');
+            $results[$key] = ($val === null) ? ($default === '1') : in_array($val, ['1', 'true', true], true);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $results,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/settings/messaging
+     * Update WhatsApp messaging control toggles
+     */
+    public function updateMessagingSettings(Request $request)
+    {
+        $allowed = [
+            'whatsapp_enabled',
+            'whatsapp_notify_booking',
+            'whatsapp_notify_delivery',
+            'whatsapp_include_tracking',
+        ];
+
+        foreach ($allowed as $key) {
+            if ($request->has($key)) {
+                $boolVal = filter_var($request->input($key), FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
+                Setting::updateOrCreate(
+                    ['key' => $key],
+                    ['value' => $boolVal]
+                );
+            }
+        }
+
+        return $this->getMessagingSettings();
+    }
 }

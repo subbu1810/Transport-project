@@ -1867,6 +1867,9 @@ class WaybillController extends Controller
                     'remarks' => ($waybill->remarks ? $waybill->remarks . ' | ' : '') . 'POD Uploaded at ' . now()->format('Y-m-d H:i')
                 ]);
 
+                // Dispatch WhatsApp delivery notification if enabled in Settings
+                $this->dispatchDeliveryWhatsAppNotification($waybill);
+
                 return response()->json([
                     'success' => true,
                     'message' => 'POD uploaded successfully',
@@ -1881,11 +1884,101 @@ class WaybillController extends Controller
     }
 
     /**
+     * Dispatch WhatsApp notification for GC Delivery / POD Upload
+     */
+    public function dispatchDeliveryWhatsAppNotification(Waybill $waybill, ?string $customPhone = null, string $recipientType = 'consignor'): array
+    {
+        try {
+            $waEnabled = \App\Models\Setting::where('key', 'whatsapp_enabled')->value('value');
+            if ($waEnabled !== null && in_array($waEnabled, ['0', 'false', false], true)) {
+                return ['success' => false, 'message' => 'WhatsApp notifications are deactivated in Settings.', 'disabled' => true];
+            }
+
+            $deliveryEnabled = \App\Models\Setting::where('key', 'whatsapp_notify_delivery')->value('value');
+            if ($deliveryEnabled !== null && in_array($deliveryEnabled, ['0', 'false', false], true)) {
+                return ['success' => false, 'message' => 'Delivery WhatsApp notifications are deactivated in Settings.', 'disabled' => true];
+            }
+
+            $token = env('WHATSAPP_TOKEN', '');
+            $phoneId = env('WHATSAPP_PHONE_NUMBER_ID', '');
+
+            if (empty($token) || empty($phoneId)) {
+                $integration = \App\Models\WhatsAppIntegration::where('status', 'connected')->first();
+                if ($integration) {
+                    $token = $integration->getDecryptedAccessToken();
+                    $phoneId = $integration->phone_number_id;
+                }
+            }
+
+            if (empty($token) || empty($phoneId)) {
+                return ['success' => false, 'message' => 'WhatsApp API credentials not configured'];
+            }
+
+            $rawPhone = $customPhone ?: ($waybill->consignor->mobile_no ?? $waybill->consignor->mobile ?? $waybill->consignee->mobile_number ?? null);
+            if (empty($rawPhone)) return ['success' => false, 'message' => 'No mobile number found'];
+
+            $cleanDigits = preg_replace('/[^0-9]/', '', (string)$rawPhone);
+            if (strlen($cleanDigits) === 10) $cleanDigits = '91' . $cleanDigits;
+
+            $companyName = env('APP_NAME', 'Sri Mallikarjuna Parcel Service');
+            $gcNo = $waybill->gc_number;
+            $deliveredAt = $waybill->delivered_at ? date('d-m-Y H:i', strtotime($waybill->delivered_at)) : date('d-m-Y H:i');
+
+            $body = "🚚 *{$companyName}*\n\n"
+                  . "✅ *Consignment Delivered Successfully!*\n\n"
+                  . "• *GC No:* {$gcNo}\n"
+                  . "• *Delivered At:* {$deliveredAt}\n"
+                  . "• *Consignee:* " . ($waybill->consignee->name ?? 'N/A') . "\n"
+                  . "• *Status:* DELIVERED 📦\n\n"
+                  . "Thank you for shipping with {$companyName}!";
+
+            $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                'messaging_product' => 'whatsapp',
+                'to'                => $cleanDigits,
+                'type'              => 'text',
+                'text'              => ['body' => $body]
+            ]));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                "Authorization: Bearer {$token}",
+            ]);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            return [
+                'success' => ($httpCode >= 200 && $httpCode < 300),
+                'httpCode' => $httpCode,
+                'decoded' => json_decode($response, true)
+            ];
+        } catch (\Exception $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Dispatch WhatsApp notification for GC Booking
      */
     public function dispatchBookingWhatsAppNotification(Waybill $waybill, ?string $customPhone = null, string $recipientType = 'consignor'): array
     {
         try {
+            // Check settings toggles
+            $waEnabled = \App\Models\Setting::where('key', 'whatsapp_enabled')->value('value');
+            if ($waEnabled !== null && in_array($waEnabled, ['0', 'false', false], true)) {
+                return ['success' => false, 'message' => 'WhatsApp notifications are deactivated in Settings.', 'disabled' => true];
+            }
+
+            $bookingEnabled = \App\Models\Setting::where('key', 'whatsapp_notify_booking')->value('value');
+            if ($bookingEnabled !== null && in_array($bookingEnabled, ['0', 'false', false], true)) {
+                return ['success' => false, 'message' => 'Consignment booking WhatsApp notifications are deactivated in Settings.', 'disabled' => true];
+            }
+
             $token = env('WHATSAPP_TOKEN', '');
             $phoneId = env('WHATSAPP_PHONE_NUMBER_ID', '');
 
@@ -1938,6 +2031,17 @@ class WaybillController extends Controller
             $amount = number_format((float)($waybill->grand_total ?? 0), 2);
             $accType = strtoupper($waybill->account_type ?? 'TO PAY');
 
+            // Build secure tracking link if enabled
+            $includeTracking = \App\Models\Setting::where('key', 'whatsapp_include_tracking')->value('value');
+            $trackUrl = '';
+            if ($includeTracking === null || in_array($includeTracking, ['1', 'true', true], true)) {
+                $trackToken = self::generateTrackingToken($gcNo);
+                $appUrl = rtrim(env('APP_URL', 'https://mallikarjuna-api.ssquareg.tech'), '/');
+                $trackUrl = "{$appUrl}/track/{$gcNo}?token={$trackToken}";
+            }
+
+            $trackSection = $trackUrl ? "\n\n📍 *Track Live:* {$trackUrl}" : "";
+
             $text = "🚚 *{$companyName}*\n\n"
                   . "✅ *Consignment Booked Successfully!*\n"
                   . "• *GC No:* {$gcNo}\n"
@@ -1947,7 +2051,8 @@ class WaybillController extends Controller
                   . "• *Route:* {$from} ➔ {$to}\n"
                   . "• *Articles:* {$articles}{$articleDesc}\n"
                   . "• *Total Freight:* ₹{$amount} ({$accType})\n"
-                  . "• *Status:* Booked\n\n"
+                  . "• *Status:* Booked"
+                  . $trackSection . "\n\n"
                   . "Thank you for shipping with us!";
 
             // Send via Meta WhatsApp Cloud API using curl
@@ -2158,6 +2263,55 @@ class WaybillController extends Controller
         $downloadName = "POD_{$gcNumber}.{$extension}";
 
         return response()->download($fullPath, $downloadName);
+    }
+
+    /**
+     * Generate 10-character tamper-proof cryptographic token for a GC
+     */
+    public static function generateTrackingToken(string $gcNumber): string
+    {
+        return substr(hash_hmac('sha256', strtoupper(trim($gcNumber)), env('APP_KEY', 'GarudaSecretKey2026')), 0, 10);
+    }
+
+    /**
+     * Public Consignment Tracking Route (No login required, tamper-proof token protected)
+     */
+    public function publicTrack($gcNumber, Request $request)
+    {
+        $gcNumber = trim($gcNumber);
+        $expectedToken = self::generateTrackingToken($gcNumber);
+        $providedToken = $request->query('token');
+
+        // Tamper verification: token must match to prevent unauthorized viewing of other consignments
+        if (!$providedToken || !hash_equals($expectedToken, $providedToken)) {
+            return response()->view('track-invalid', [
+                'gcNumber' => $gcNumber,
+                'message'  => 'This tracking link is invalid or has been modified. Please use the original secure link sent to your WhatsApp.'
+            ], 403);
+        }
+
+        $waybill = Waybill::with([
+            'originBranch',
+            'destination',
+            'consignor',
+            'consignee',
+            'articles',
+            'transits.branch',
+        ])
+            ->where('gc_number', $gcNumber)
+            ->first();
+
+        if (!$waybill) {
+            return response()->view('track-invalid', [
+                'gcNumber' => $gcNumber,
+                'message'  => "Consignment with GC No #{$gcNumber} was not found."
+            ], 404);
+        }
+
+        return view('public-track', [
+            'waybill' => $waybill,
+            'token'   => $providedToken,
+        ]);
     }
 }
 
