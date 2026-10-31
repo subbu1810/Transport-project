@@ -183,6 +183,8 @@ Route::prefix('v1')->group(function () {
     Route::apiResource('day-book-closings', DayBookClosingController::class);
 
     // Settings routes
+    Route::get('settings/messaging', [SettingsController::class, 'getMessagingSettings']);
+    Route::post('settings/messaging', [SettingsController::class, 'updateMessagingSettings']);
     Route::get('settings/all', [SettingsController::class , 'getAllSettings']);
     Route::get('settings/{key}', [SettingsController::class , 'getSetting']);
     // For logo management
@@ -192,10 +194,6 @@ Route::prefix('v1')->group(function () {
     Route::post('settings/upi-details', [SettingsController::class , 'updateUPIDetails']);
     Route::post('settings/upi-qr', [SettingsController::class , 'updateQR']);
     Route::delete('settings/upi-qr', [SettingsController::class , 'deleteQR']);
-    
-    // Messaging settings toggles
-    Route::get('settings/messaging', [SettingsController::class, 'getMessagingSettings']);
-    Route::post('settings/messaging', [SettingsController::class, 'updateMessagingSettings']);
     
     // Backup routes
     Route::get('settings/backup/status', [BackupController::class, 'status']);

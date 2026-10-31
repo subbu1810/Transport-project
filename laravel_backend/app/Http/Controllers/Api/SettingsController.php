@@ -240,9 +240,16 @@ class SettingsController extends Controller
         ];
 
         $results = [];
-        foreach ($keys as $key => $default) {
-            $val = Setting::where('key', $key)->value('value');
-            $results[$key] = ($val === null) ? ($default === '1') : in_array($val, ['1', 'true', true], true);
+        try {
+            foreach ($keys as $key => $default) {
+                $val = Setting::where('key', $key)->value('value');
+                $results[$key] = ($val === null) ? ($default === '1') : in_array($val, ['1', 'true', true], true);
+            }
+        } catch (\Throwable $e) {
+            // Safe fallback if database table or cache is momentarily unavailable
+            foreach ($keys as $key => $default) {
+                $results[$key] = ($default === '1');
+            }
         }
 
         return response()->json([
@@ -264,14 +271,18 @@ class SettingsController extends Controller
             'whatsapp_include_tracking',
         ];
 
-        foreach ($allowed as $key) {
-            if ($request->has($key)) {
-                $boolVal = filter_var($request->input($key), FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
-                Setting::updateOrCreate(
-                    ['key' => $key],
-                    ['value' => $boolVal]
-                );
+        try {
+            foreach ($allowed as $key) {
+                if ($request->has($key)) {
+                    $boolVal = filter_var($request->input($key), FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
+                    Setting::updateOrCreate(
+                        ['key' => $key],
+                        ['value' => $boolVal]
+                    );
+                }
             }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed updating messaging setting: ' . $e->getMessage());
         }
 
         return $this->getMessagingSettings();
