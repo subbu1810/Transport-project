@@ -622,6 +622,11 @@
                         </a>
                     </div>
                 </div>
+            @elseif($isDelivered)
+                <div class="pod-box" style="background: #f8fafc; border-color: #e2e8f0;">
+                    <h3 style="color: #334155;">📄 Proof of Delivery (POD)</h3>
+                    <p style="color: #64748b; margin-top: 4px;">Physical delivery completed. Signed copy is being processed by the destination branch.</p>
+                </div>
             @endif
 
             <!-- Security Badge -->
