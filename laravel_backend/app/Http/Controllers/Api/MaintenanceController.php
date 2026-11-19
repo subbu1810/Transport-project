@@ -148,4 +148,80 @@ class MaintenanceController extends Controller
             'data' => $query->get()
         ]);
     }
+
+    /**
+     * Generate maintenance bills on demand (API endpoint)
+     */
+    public function generateBill(Request $request)
+    {
+        $month = (int) ($request->input('month') ?: now()->subMonth()->month);
+        $year = (int) ($request->input('year') ?: now()->subMonth()->year);
+        $transportId = $request->input('transport_id');
+        $customRate = $request->input('rate');
+
+        $query = Transport::where('is_active', true);
+        if ($transportId) {
+            $query->where('id', $transportId);
+        }
+
+        // If no custom rate is provided, only process transports with rate > 0
+        if ($customRate === null) {
+            $query->where('maintenance_rate', '>', 0);
+        }
+
+        $transports = $query->get();
+
+        if ($transports->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active transport found with a configured maintenance rate (> 0). Please update the maintenance rate in Transport Master or provide a rate in the request.'
+            ], 422);
+        }
+
+        $branches = \App\Models\Branch::where('is_active', 1)->get();
+        $generatedCount = 0;
+        $bills = [];
+
+        foreach ($transports as $transport) {
+            $rate = ($customRate !== null && $customRate > 0) ? (float) $customRate : (float) $transport->maintenance_rate;
+            if ($rate <= 0) continue;
+
+            foreach ($branches as $branch) {
+                // Count GCs originated from this specific branch for the specified month/year
+                $gcCount = Waybill::whereMonth('created_at', $month)
+                    ->whereYear('created_at', $year)
+                    ->where('origin_branch_id', $branch->id)
+                    ->count();
+
+                if ($gcCount > 0) {
+                    $totalAmount = $gcCount * $rate;
+
+                    $bill = MaintenanceBill::updateOrCreate(
+                        [
+                            'transport_id' => $transport->id,
+                            'branch_id'    => $branch->id,
+                            'bill_month'   => $month,
+                            'bill_year'    => $year,
+                        ],
+                        [
+                            'gc_count'     => $gcCount,
+                            'rate'         => $rate,
+                            'total_amount' => $totalAmount,
+                            'status'       => 'Pending'
+                        ]
+                    );
+
+                    $generatedCount++;
+                    $bills[] = $bill->load(['transport', 'branch']);
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully generated {$generatedCount} maintenance bill(s) for {$month}/{$year}.",
+            'generated_count' => $generatedCount,
+            'data' => $bills
+        ]);
+    }
 }

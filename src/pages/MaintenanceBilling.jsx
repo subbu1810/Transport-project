@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config/api';
-import { CreditCard, AlertTriangle, CheckCircle, Clock, FileText, Download } from 'lucide-react';
+import { CreditCard, AlertTriangle, CheckCircle, Clock, FileText, Download, Play, RefreshCw, X, ShieldAlert } from 'lucide-react';
 import MaintenanceInvoice from '../components/MaintenanceInvoice';
 
 const MaintenanceBilling = () => {
@@ -8,6 +8,18 @@ const MaintenanceBilling = () => {
     const [loading, setLoading] = useState(true);
     const [processingId, setProcessingId] = useState(null);
     const [selectedBill, setSelectedBill] = useState(null);
+
+    // Manual Bill Generation State
+    const [showGenerateModal, setShowGenerateModal] = useState(false);
+    const [genMonth, setGenMonth] = useState(new Date().getMonth() === 0 ? 12 : new Date().getMonth());
+    const [genYear, setGenYear] = useState(new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear());
+    const [genRate, setGenRate] = useState('');
+    const [generating, setGenerating] = useState(false);
+    const [genMessage, setGenMessage] = useState(null);
+
+    const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+    const roleName = (typeof userObj?.role === 'string' ? userObj.role : userObj?.role?.role_name || '').toLowerCase();
+    const canGenerateBills = roleName === 'superadmin' || roleName === 'super admin' || roleName === 'admin';
 
     const companyInfo = {
         name: 'S Square G Tech Solutions Pvt Ltd.',
@@ -60,6 +72,47 @@ const MaintenanceBilling = () => {
             console.error('Error fetching bills:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGenerateBills = async () => {
+        setGenerating(true);
+        setGenMessage(null);
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const payload = {
+                month: parseInt(genMonth),
+                year: parseInt(genYear),
+                transport_id: user.transport_id,
+            };
+            if (genRate && parseFloat(genRate) > 0) {
+                payload.rate = parseFloat(genRate);
+            }
+
+            const res = await fetch(`${API_BASE_URL}/maintenance/generate-bill`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success) {
+                setGenMessage({ type: 'success', text: data.message });
+                fetchBills();
+                setTimeout(() => {
+                    setShowGenerateModal(false);
+                    setGenMessage(null);
+                }, 1800);
+            } else {
+                setGenMessage({ type: 'error', text: data.message || 'Failed to generate bills.' });
+            }
+        } catch (err) {
+            console.error('Error generating bills:', err);
+            setGenMessage({ type: 'error', text: 'Error connecting to server. Please try again.' });
+        } finally {
+            setGenerating(false);
         }
     };
 
@@ -156,9 +209,24 @@ const MaintenanceBilling = () => {
 
     return (
         <div className="p-6 max-w-6xl mx-auto">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-800 mb-2">Maintenance Billing</h1>
-                <p className="text-gray-600">View and pay your monthly maintenance fees based on GC counts.</p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 mb-2">Maintenance Billing</h1>
+                    <p className="text-gray-600">View and pay your monthly maintenance fees based on GC counts.</p>
+                </div>
+                {canGenerateBills && (
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => {
+                                setGenMessage(null);
+                                setShowGenerateModal(true);
+                            }}
+                            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                            <Play size={14} /> Generate Monthly Bills
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -177,7 +245,29 @@ const MaintenanceBilling = () => {
                     <tbody className="divide-y divide-gray-50 text-sm">
                         {bills.length === 0 ? (
                             <tr>
-                                <td colSpan="7" className="px-6 py-8 text-center text-gray-500">No billing records found.</td>
+                                <td colSpan="7" className="px-6 py-12 text-center">
+                                    <div className="max-w-md mx-auto text-center space-y-3">
+                                        <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                                            <AlertTriangle size={24} />
+                                        </div>
+                                        <p className="text-gray-800 font-bold">No maintenance bills found for this transport.</p>
+                                        <p className="text-gray-500 text-xs leading-relaxed">
+                                            Maintenance bills are generated automatically on the 1st of each month based on booked GCs. 
+                                            Ensure the <strong>Maintenance Rate (per GC)</strong> is set in <strong>Transport Master</strong>, or click <strong>Generate Monthly Bills</strong> to generate bills immediately.
+                                        </p>
+                                        {canGenerateBills && (
+                                            <button
+                                                onClick={() => {
+                                                    setGenMessage(null);
+                                                    setShowGenerateModal(true);
+                                                }}
+                                                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm mt-2"
+                                            >
+                                                <Play size={13} /> Generate Bills Now
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
                             </tr>
                         ) : (
                             bills.map((bill) => (
@@ -246,6 +336,109 @@ const MaintenanceBilling = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Manual Bill Generation Modal */}
+            {showGenerateModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 text-white flex items-center justify-between">
+                            <div>
+                                <h3 className="font-bold text-base">Generate Monthly Maintenance Bills</h3>
+                                <p className="text-xs text-blue-100">Calculate fees for all branches based on GC count</p>
+                            </div>
+                            <button
+                                onClick={() => setShowGenerateModal(false)}
+                                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {genMessage && (
+                                <div className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                                    genMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                }`}>
+                                    {genMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                                    <span>{genMessage.text}</span>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Billing Month</label>
+                                    <select
+                                        value={genMonth}
+                                        onChange={(e) => setGenMonth(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {[
+                                            { m: 1, name: 'January' }, { m: 2, name: 'February' }, { m: 3, name: 'March' },
+                                            { m: 4, name: 'April' }, { m: 5, name: 'May' }, { m: 6, name: 'June' },
+                                            { m: 7, name: 'July' }, { m: 8, name: 'August' }, { m: 9, name: 'September' },
+                                            { m: 10, name: 'October' }, { m: 11, name: 'November' }, { m: 12, name: 'December' }
+                                        ].map(item => (
+                                            <option key={item.m} value={item.m}>{item.name} ({item.m})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Billing Year</label>
+                                    <input
+                                        type="number"
+                                        value={genYear}
+                                        onChange={(e) => setGenYear(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">
+                                    Rate per GC (₹) <span className="text-gray-400 font-normal">(Optional override)</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Leave blank to use Transport Master rate"
+                                    value={genRate}
+                                    onChange={(e) => setGenRate(e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                    If left empty, the rate configured in Transport Master will be applied.
+                                </p>
+                            </div>
+
+                            <div className="pt-2 flex items-center justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGenerateModal(false)}
+                                    className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-800 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={generating}
+                                    onClick={handleGenerateBills}
+                                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+                                >
+                                    {generating ? (
+                                        <>
+                                            <RefreshCw size={14} className="animate-spin" /> Generating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Play size={14} /> Calculate & Generate
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Hidden Invoice Template for Printing */}
             <MaintenanceInvoice bill={selectedBill} companyInfo={companyInfo} />
