@@ -455,7 +455,7 @@ class WaybillController extends Controller
             }
 
             // Prevent modification if already delivered (unless superadmin)
-            $userRole = $request->input('role') ?? ($request->user()?->role ?? (auth()->user()?->role ?? ''));
+            $userRole = strtolower((string) ($request->input('role') ?? ($request->user()?->role ?? (auth()->user()?->role ?? ''))));
             if ($userRole !== 'superadmin') {
                 if (strtoupper($waybill->status) === 'DELIVERED' || strtoupper($waybill->deliver_status) === 'DELIVERED') {
                     return response()->json([
